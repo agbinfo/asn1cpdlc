@@ -1,0 +1,20 @@
+\.suo$
+\.opensdf$
+\.sdf$
+- Copy\.
+\.vcxproj\.filters$
+\.t?log$
+\.idb$
+\.obj$
+\.pch$
+\.pdb$
+^Debug/
+^ipch/
+^ConsoleApplication1/ReadMe.txt
+^Asn1ToCPlusPlus/Assets/
+^Asn1ToCPlusPlus/bin/
+^Asn1ToCPlusPlus/obj/
+^Asn1ToCPlusPlusConsole/bin/
+^Asn1ToCPlusPlusConsole/obj/
+^Asn1ToCPlusPlus/project\.lock\.json$
+^Asn1ToCPlusPlusConsole/Asn1ToCPlusPlusConsole\.csproj\.user$

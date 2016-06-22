@@ -1,0 +1,6 @@
+repo: bb37ab4b12773cf1c3058ffd813289ebeafbb150
+node: d590b44359f061a95038ff1b1bba01772cae30eb
+branch: serializer
+latesttag: null
+latesttagdistance: 35
+changessincelatesttag: 35
