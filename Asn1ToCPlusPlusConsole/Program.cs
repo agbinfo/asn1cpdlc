@@ -972,7 +972,8 @@ namespace Asn1ToCPlusPlusConsole
         {
           setExtensible();
         }
-        else {
+        else
+        {
           Element element = new Element(ModuleName);
           element.identifier = identifier;
           element.typeInfo.Read(parser, context);
@@ -1031,7 +1032,8 @@ namespace Asn1ToCPlusPlusConsole
           {
             identifier = item.typeInfo.ModuleName + "::" + item.typeInfo.TypeName;
           }
-          else {
+          else
+          {
             identifier = item.typeInfo.TypeName;
           }
         }
@@ -1106,19 +1108,20 @@ namespace Asn1ToCPlusPlusConsole
       {
         hWriter.WriteLine("  s.stream.push_back(m.{0}.isInitialized() ? 1 : 0, 1);");
 
-      //Serializer & operator >> (Serializer & s, ATCMessageHeader & m) {
-      //  // no extension marker
-      //  // optional/default
-      //  // serializeSequence(s, no_marker, optionals[messageRefNumber], defaults[logicalAck=notRequired]);
-      //  bool has_messageRefNumber = (s.stream.pop_front(1) == 1);  // OPTIONAL; 0 = not used, 1 = present
-      //  bool has_logicalAck = (s.stream.pop_front(1) == 1);  // DEFAULT; 0 = default, 1 = present
-      //  s >> m.messageIdNumber();
-      //  if (has_messageRefNumber) s >> m.messageRefNumber();
-      //  s >> m.dateTime();
-      //  if (has_logicalAck) s >> m.logicalAck();
-      //  return s;
-      //}
-      throw new NotImplementedException();
+        //Serializer & operator >> (Serializer & s, ATCMessageHeader & m) {
+        //  // no extension marker
+        //  // optional/default
+        //  // serializeSequence(s, no_marker, optionals[messageRefNumber], defaults[logicalAck=notRequired]);
+        //  bool has_messageRefNumber = (s.stream.pop_front(1) == 1);  // OPTIONAL; 0 = not used, 1 = present
+        //  bool has_logicalAck = (s.stream.pop_front(1) == 1);  // DEFAULT; 0 = default, 1 = present
+        //  s >> m.messageIdNumber();
+        //  if (has_messageRefNumber) s >> m.messageRefNumber();
+        //  s >> m.dateTime();
+        //  if (has_logicalAck) s >> m.logicalAck();
+        //  return s;
+        //}
+        throw new NotImplementedException();
+      }
     }
   }
 

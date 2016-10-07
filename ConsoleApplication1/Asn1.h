@@ -113,7 +113,6 @@ namespace Asn1 {
     Sequence* container_;
     // bool optional_;
   public:
-    SequenceElementBase(bool /* optional */) : container_(0) { } // deprecated
     SequenceElementBase() : container_(0) { }
     void setContainer(Sequence& container) { container_ = &container; }
     const Sequence& getContainer() const { return *container_; }
@@ -141,7 +140,7 @@ namespace Asn1 {
       CompositeT& container_;
       std::back_insert_iterator< typename CompositeT::ContainerType_ > it_;
     public:
-      Inserter(CompositeT& container) : container_(container), it_(container.elements()) {}
+      explicit Inserter(CompositeT& container) : container_(container), it_(container.elements()) {}
       Inserter& operator*() { return *this; }
       Inserter& operator++() { return *this; }
       Inserter& operator++(int) { return *this; }
@@ -158,15 +157,11 @@ namespace Asn1 {
 
   // Defines an Asn1 Choice object.
   // Example:
-  // class Mychoice : public Asn1Choice {
-  //   Choice<0, Asn1Type1>::type firstChoice;
-  //   Choice<1, Asn1Type2>::type secondChoice;
+  // class Mychoice : public Asn1::Choice<0,1> {
+  //   Option<0, Asn1Type1>::type firstChoice() { return Option<0, Asn1Type1>::getElement(*this); }
+  //   Option<1, Asn1Type2>::type secondChoice() { return Option<1, Asn1Type2>::getElement(*this); }
   //   ...
-  //   MyChoice() {
-  //     Inserter inserter = back_inserter();
-  //     inserter++ = firstChoice;
-  //     inserter++ = secondChoice;
-  //   }
+  //   MyChoice() { }
   // }
   class Choice : public Asn1Object {
   private:
@@ -211,7 +206,7 @@ namespace Asn1 {
 
     template <int i, typename T> class Option {
     public:
-      // static ChoiceElement<CmLogonRequest>& cmLogonRequest() { return ChoiceElement<CmLogonRequest>(); }
+      // Option<cmLogonRequest_idx, CmLogonRequest>::type cmLogonRequest() { return Option<cmLogonRequest_idx, CmLogonRequest>::getElement(*this); }
       typedef T& type;
       static typename type& getElement(Choice& parent) {
         if (parent.hasElement() && parent.selected_ == i) { return dynamic_cast<const type &>(parent.element_->element()); }
@@ -236,7 +231,7 @@ namespace Asn1 {
       Option();
     };
 
-    Choice() : min_(-1), max_(-1), selected_(-1), element_(0) {}
+    Choice() : min_(-1), max_(-1), selected_(-1), element_(nullptr) {}
     Choice(int min, int max) : min_(min), max_(max), selected_(-1), element_(nullptr) {}
 
     Choice(const Choice& rhs) : min_(rhs.min_), max_(rhs.max_), selected_(-1), element_(nullptr) {
@@ -259,8 +254,6 @@ namespace Asn1 {
     //}
   };
 
-// typedef Asn1Choice Choice;
-
   // Wraps an object so that it can have an uninitialized state
   // T should be:
   // (a) CopyConstructible:
@@ -273,13 +266,24 @@ namespace Asn1 {
     T* element;
     Ref() : element(0) {}
     Ref(const T& value) { element = new T(value); }
-    Ref(const Ref& rhs) : element(nullptr) {
-      if (rhs.element) construct(*rhs.element); 
+    Ref(const Ref& rhs) : element(nullptr) 
+    {
+      if (rhs.element)
+      {
+        element = new T(*rhs.element);
+      }
     }
-    Ref& operator=(const Ref& rhs) {
-      if (rhs.element) { construct(*rhs.element); }
-      else { delete element; element = nullptr; }
+    ~Ref() { delete element; element = nullptr; }
+    Ref& operator=(Ref rhs) 
+    {
+      swap(rhs);
       return *this;
+    }
+    void swap(Ref& other)
+    {
+      T* temp_element = element;
+      element = other.element;
+      other.element = temp_element;
     }
     void construct() {
       delete element;
@@ -425,12 +429,19 @@ namespace Asn1 {
   protected:
     SequenceOfBase(int min_index, int max_index) : min_index_(min_index), max_index_(max_index) { }
     SequenceOfBase(const SequenceOfBase& rhs) : min_index_(rhs.min_index_), max_index_(rhs.max_index_) { }
-    SequenceOfBase& operator=(const SequenceOfBase& rhs) { min_index_ = rhs.min_index_; max_index_ = rhs.max_index_; return *this; }
+    // SequenceOfBase& operator=(const SequenceOfBase& rhs) { min_index_ = rhs.min_index_; max_index_ = rhs.max_index_; return *this; }
+    void swap(SequenceOfBase& other) 
+    {
+      std::swap(min_index_, other.min_index_);
+      std::swap(max_index_, other.max_index_);
+    }
   public:
     virtual Asn1Type getType() const { return SequenceOfType; }
     virtual bool isInitialized() const { return false; }
     virtual void construct(unsigned i) = 0;
     virtual void destroy(unsigned i) = 0;
+    int min_index() const { return min_index_; }
+    int max_index() const { return min_index_; }
   };
 
   // SequenceOf
@@ -442,30 +453,34 @@ namespace Asn1 {
     typedef SequenceOf type;
     typedef typename std::vector<PrimitiveType>::const_iterator Iterator;
   private:
-    int min_index_;
-    int max_index_;
     std::vector<T*> elements_;
     typedef typename std::vector<typename T*>::const_iterator const_iterator;
     typedef typename std::vector<typename T*>::iterator iterator;
   public:
-    SequenceOf() : SequenceOfBase(MinIndex, MaxIndex), min_index_(MinIndex), max_index_(MaxIndex) {}
-    SequenceOf(const SequenceOf&rhs) : SequenceOfBase(rhs), min_index_(MinIndex), max_index_(MaxIndex)
+    SequenceOf() : SequenceOfBase(MinIndex, MaxIndex) {}
+    SequenceOf(const SequenceOf&rhs) : SequenceOfBase(rhs)
     {
       for (const_iterator it = rhs.elements_.begin(); it != rhs.elements_.end(); ++it)
       {
         elements_.push_back(new T(*(*it)));
       }
     }
-    SequenceOf& operator=(const SequenceOf& rhs)
+    void swap(SequenceOf& other)
     {
-      SequenceOfBase::operator=(rhs);
-      min_index_ = rhs.min_index_;
-      max_index_ = rhs.max_index_;
-      //for (const_iterator it = rhs.elements_.begin(); it != rhs.elements_.end(); ++it)
-      //{
-      //  T* o = new T(*it);
-      //  elements_.push_back(o);
-      //}
+      SequenceOfBase::swap(other);
+      std::swap(elements_, other.elements_);
+    }
+    SequenceOf& operator=(SequenceOf rhs)
+    {
+      swap(rhs);
+      //SequenceOfBase::operator=(rhs);
+      //min_index_ = rhs.min_index_;
+      //max_index_ = rhs.max_index_;
+      ////for (const_iterator it = rhs.elements_.begin(); it != rhs.elements_.end(); ++it)
+      ////{
+      ////  T* o = new T(*it);
+      ////  elements_.push_back(o);
+      ////}
       return *this;
     }
     T& operator[](unsigned pos) {
@@ -598,25 +613,31 @@ namespace Asn1 {
     typedef std::string PrimitiveType;
   private:
     bool initialized_;
-    int min_size;
-    int max_size;
+    int min_size_;
+    int max_size_;
     PrimitiveType value_;
   public:
     Asn1Type getType() const { return Bitstring; }
     virtual Asn1StringType getStringType() const { return Octet; }
-    int getMinimumSize() const { return min_size; }
-    int getMaximumSize() const { return max_size; }
+    int getMinimumSize() const { return min_size_; }
+    int getMaximumSize() const { return max_size_; }
     bool isInitialized() const { return initialized_; }
 
-    BitString() : min_size(0), max_size(-1), initialized_(false), value_() {}
-    BitString(int min, int max) : min_size(min), max_size(max), initialized_(false), value_() {}
-    BitString(const BitString& src) : min_size(src.min_size), max_size(src.max_size), initialized_(src.initialized_), value_(src.value_) {}
-    const BitString& operator=(const BitString& src) {
-      min_size = src.min_size;
-      max_size = src.max_size;
-      initialized_ = src.initialized_;
-      value_ = src.value_;
+    BitString() : min_size_(0), max_size_(-1), initialized_(false), value_() {}
+    BitString(int min, int max) : min_size_(min), max_size_(max), initialized_(false), value_() {}
+    BitString(const BitString& src) : min_size_(src.min_size_), max_size_(src.max_size_), initialized_(src.initialized_), value_(src.value_) {}
+    ~BitString() {}
+    const BitString& operator=(BitString src)
+    {
+      swap(src);
       return *this;
+    }
+    void swap(BitString& other)
+    {
+      std::swap(min_size_, other.min_size_);
+      std::swap(max_size_, other.max_size_);
+      std::swap(initialized_, other.initialized_);
+      std::swap(value_, other.value_);
     }
     const BitString& operator=(const PrimitiveType v) {
       initialized_ = true;
@@ -633,27 +654,29 @@ namespace Asn1 {
     typedef std::string PrimitiveType;
   private:
     bool initialized_;
-    int min_size;
-    int max_size;
+    int min_size_;
+    int max_size_;
     PrimitiveType value_;
   public:
     Asn1Type getType() const { return OctetString; }
     virtual Asn1StringType getStringType() const { return Octet; }
-    int getMinimumSize() const { return min_size; }
-    int getMaximumSize() const { return max_size; }
-    // PrimitiveType getValue() const { return value_; }
+    int getMinimumSize() const { return min_size_; }
+    int getMaximumSize() const { return max_size_; }
     bool isInitialized() const { return initialized_; }
 
-    Asn1OctetString(int min, int max) : min_size(min), max_size(max), initialized_(false), value_() {}
-    Asn1OctetString(const Asn1OctetString& src) : min_size(src.min_size), max_size(src.max_size), initialized_(src.initialized_), value_(src.value_) {}
-    const Asn1OctetString& operator=(const Asn1OctetString& src) {
-      min_size = src.min_size;
-      max_size = src.max_size;
-      initialized_ = src.initialized_;
-      value_ = src.value_;
+    Asn1OctetString(int min, int max) : min_size_(min), max_size_(max), initialized_(false), value_() {}
+    Asn1OctetString(const Asn1OctetString& src) : min_size_(src.min_size_), max_size_(src.max_size_), initialized_(src.initialized_), value_(src.value_) {}
+    const Asn1OctetString& operator=(Asn1OctetString src) {
+      swap(src);
       return *this;
     }
-    const Asn1OctetString& operator=(const PrimitiveType v) {
+    void swap(Asn1OctetString & other) {
+      std::swap(min_size_, other.min_size_);
+      std::swap(max_size_, other.max_size_);
+      std::swap(initialized_, other.initialized_);
+      std::swap(value_, other.value_);
+    }
+    const Asn1OctetString& operator=(const PrimitiveType & v) {
       initialized_ = true;
       value_ = v;
       return *this;
@@ -661,12 +684,6 @@ namespace Asn1 {
     operator const PrimitiveType() const {
       return value_;
     }
-
-    //void setValue(PrimitiveType v) {
-    //	// assert (min_size <= v.size() <= max_size)
-    //	value_ = v;
-    //	initialized_ = true;
-    //}
   };
 
   template <int Min, int Max = Min> class Asn1Int : public Asn1Integer {
@@ -680,8 +697,9 @@ namespace Asn1 {
   public:
     Asn1String() : Asn1OctetString(MinSize, MaxSize) {}
     Asn1String(int h) : Asn1OctetString(MinSize, MaxSize) { setValue(h); }
+    ~Asn1String() { }
     virtual Asn1StringType getStringType() const { return Octet; }
-    Asn1String<MinSize, MaxSize>& operator=(const std::string s) {
+    Asn1String<MinSize, MaxSize>& operator=(const std::string & s) {
       Asn1OctetString::operator=(s);
       return *this;
     }
@@ -690,10 +708,10 @@ namespace Asn1 {
   template <int MinSize=Unbounded, int MaxSize = MinSize> class Asn1IA5String : public Asn1OctetString {
   public:
     Asn1IA5String() : Asn1OctetString(MinSize, MaxSize) {}
-    // Asn1IA5String(int h) : Asn1OctetString(MinSize, MaxSize) { setValue(h); }
     Asn1IA5String(const Asn1IA5String& rhs) : Asn1OctetString(rhs) { }
+    ~Asn1IA5String() { }
     virtual Asn1StringType getStringType() const { return IA5; }
-    Asn1IA5String<MinSize, MaxSize>& operator=(const std::string s) {
+    Asn1IA5String<MinSize, MaxSize>& operator=(const std::string & s) {
       Asn1OctetString::operator=(s);
       return *this;
     }
