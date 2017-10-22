@@ -15,34 +15,21 @@ public:
   AircraftAddress(int min, int max) : BitString(min, max) { }
   AircraftAddress(const AircraftAddress&src) : BitString(src) { }
   const AircraftAddress& operator= (const AircraftAddress&src) {
-    return dynamic_cast<const AircraftAddress&>(BitString::operator=(src));
+    BitString::operator=(src);
+    return *this;
   }
   const AircraftAddress& operator= (const PrimitiveType v) {
-    return dynamic_cast<const AircraftAddress&>(BitString::operator=(v));
+    BitString::operator=(v);
+    return *this;
   }
 };
 class AircraftFlightIdentification : public Asn1::Asn1IA5String<2, 8> {
-public:
-  AircraftFlightIdentification() : Asn1IA5String() { }
-  AircraftFlightIdentification(const AircraftFlightIdentification&src) : Asn1IA5String(src) { }
 };
-class Airport : public Asn1::Asn1IA5String<4, 4> {
-public:
-  Airport() : Asn1IA5String() { }
-  Airport(const Airport&src) : Asn1IA5String(src) { }
-};
+class Airport : public Asn1::Asn1IA5String<4, 4> {};
 typedef Asn1::Asn1Int<2200, 3200> AltimeterEnglish;
 typedef Asn1::Asn1Int<7500, 12500> AltimeterMetric;
-class ATISCode : public Asn1::Asn1IA5String<1, 1> {
-public:
-  ATISCode() : Asn1IA5String() { }
-  ATISCode(const ATISCode&src) : Asn1IA5String(src) { }
-};
-class ATSRouteDesignator : public Asn1::Asn1IA5String<2, 7> {
-public:
-  ATSRouteDesignator() : Asn1IA5String() { }
-  ATSRouteDesignator(const ATSRouteDesignator&src) : Asn1IA5String(src) { }
-};
+class ATISCode : public Asn1::Asn1IA5String<1, 1> {};
+class ATSRouteDesignator : public Asn1::Asn1IA5String<2, 7> {};
 typedef Asn1::Asn1Int<0, 7> CodeOctalDigit;
 typedef Asn1::Asn1Int<1, 31> Day;
 typedef Asn1::Asn1Int<1, 20> DegreeIncrement;
@@ -53,26 +40,10 @@ typedef Asn1::Asn1Int<0, 8000> DistanceKm;
 typedef Asn1::Asn1Int<0, 9999> DistanceNm;
 typedef Asn1::Asn1Int<1, 500> DistanceSpecifiedKm;
 typedef Asn1::Asn1Int<1, 250> DistanceSpecifiedNm;
-class FacilityDesignation : public Asn1::Asn1IA5String<4, 8> {
-public:
-  FacilityDesignation() : Asn1IA5String() { }
-  FacilityDesignation(const FacilityDesignation&src) : Asn1IA5String(src) { }
-};
-class FacilityName : public Asn1::Asn1IA5String<3, 18> {
-public:
-  FacilityName() : Asn1IA5String() { }
-  FacilityName(const FacilityName&src) : Asn1IA5String(src) { }
-};
-class Fix : public Asn1::Asn1IA5String<1, 5> {
-public:
-  Fix() : Asn1IA5String() { }
-  Fix(const Fix&src) : Asn1IA5String(src) { }
-};
-class FreeText : public Asn1::Asn1IA5String<1, 256> {
-public:
-  FreeText() : Asn1IA5String() { }
-  FreeText(const FreeText&src) : Asn1IA5String(src) { }
-};
+class FacilityDesignation : public Asn1::Asn1IA5String<4, 8> {};
+class FacilityName : public Asn1::Asn1IA5String<3, 18> {};
+class Fix : public Asn1::Asn1IA5String<1, 5> {};
+class FreeText : public Asn1::Asn1IA5String<1, 256> {};
 typedef Asn1::Asn1Int<2850, 28000> Frequencyhf;
 typedef Asn1::Asn1String<12, 12> Frequencysatchannel; // NumericString
 typedef Asn1::Asn1Int<9000, 15999> Frequencyuhf;

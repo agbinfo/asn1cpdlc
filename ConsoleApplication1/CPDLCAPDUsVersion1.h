@@ -33,6 +33,16 @@ public:
     forwardresponse_idx = 5
   };
   virtual bool extensible() const { return true; }
+  union
+  {
+    CPDLCProviderAbortReason* abortUser_;
+    CPDLCProviderAbortReason* abortProvider_;
+    UplinkMessage* startup_;
+    PMCPDLCMessageSetVersion1::ATCUplinkMessage* send_;
+    PMCPDLCAPDUsVersion1::ATCForwardMessage* forward_;
+    PMCPDLCAPDUsVersion1::ATCForwardResponse* forwardresponse_;
+
+  } options_;
   Option<abortUser_idx, CPDLCUserAbortReason>::type abortUser();
   Option<abortProvider_idx, CPDLCProviderAbortReason>::type abortProvider();
   Option<startup_idx, UplinkMessage>::type startup();

@@ -7,11 +7,19 @@
 
 #include "Asn1.h"
 
-namespace PerSerializer {
+namespace Asn1 {
+namespace Serializer {
+
+  class BitStream;
+
   class Serializer {
   public:
-    virtual void serialize(const Asn1::Asn1Object&) = 0;
-    virtual void deserialize(Asn1::Asn1Object&) = 0;
+    // virtual void serialize(const Asn1::Asn1Object&) = 0;
+    // virtual void deserialize(Asn1::Asn1Object&) = 0;
+    BitStream & stream;
+  };
+
+  class PerSerializer : public Serializer {
   };
 
   // b7 | b6 | b5
@@ -203,5 +211,6 @@ namespace PerSerializer {
     return s;
   }
 
+}
 };
 

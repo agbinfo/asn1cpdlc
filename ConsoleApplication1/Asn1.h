@@ -9,14 +9,11 @@
 
 namespace Asn1 {
   class Sequence;
-  //class Asn1Enumerated;
   class Choice;
-
-  //typedef Asn1Sequence Sequence;
-  // typedef Asn1Enumerated Enumerated;
 
   const int Unbounded = INT_MIN;
 
+  // Primitive Types
   enum Asn1Type {
     Null,
     Boolean,
@@ -54,76 +51,43 @@ namespace Asn1 {
     Octet
   };
 
+  template <typename Derived, Asn1Type BaseType>
   class Asn1Object {
   public:
-    virtual Asn1Type getType() const = 0;
+    static Asn1Type getType() { return BaseType; }
     // This method shall return true iff all elements that
     // are required and without a default value have been assigned values
     // that are initialized as well.
-    virtual bool isInitialized() const = 0;
-    virtual bool extensible() const { return false; }
-    virtual bool extended() const { return false; }
+    //virtual bool isInitialized() const = 0;
+    //virtual bool extensible() const { return false; }
+    //virtual bool extended() const { return false; }
   };
 
-  class Oid : public Asn1Object {
+  class Oid : public Asn1Object<Oid, OID> {
+  private:
+    int oid_;
   public:
-    virtual Asn1Type getType() const { return OID; }
-    virtual bool isInitialized() const { return true; }
+    operator int() { return oid_; }
+    Oid& operator=(int oid) { oid_ = oid; return *this; }
   };
 
   // The NULL object holds no value other than its presence/absence.
-  class Asn1NULL : public Asn1Object {
+  class Asn1NULL : public Asn1Object<Asn1NULL, Asn1Type::Null> {
   public:
-    virtual Asn1Type getType() const { return Null; }
-    virtual bool isInitialized() const { return true; }
   };
 
   template <int Min, int Max, typename PrimitiveType=int>
-  class Enumerated : public Asn1Object {
+  class Enumerated : public Asn1Object<Enumerated, EnumeratedType> {
   private:
     PrimitiveType value_;
   public:
-    virtual Asn1Type getType() const { return EnumeratedType; }
-    virtual bool isInitialized() const { return true; }
     int value() const { return value_; }
     Enumerated(const PrimitiveType& value) : value_(value) { }
     Enumerated() { }
     Enumerated& operator=(const PrimitiveType& value) { value_ = value; return *this; }
   };
 
-  class Asn1Enumerated : public Asn1Object {
-  private:
-    bool initialized_;
-    int value_;
-  protected:
-    Asn1Enumerated() : initialized_(false), value_(-1) {}
-    Asn1Enumerated(int value) : initialized_(true), value_(value) {}
-  public:
-    std::vector<int> enum_values;
-    Asn1Enumerated& operator<<(int value) { enum_values.push_back(value); return *this; }
-    virtual Asn1Type getType() const { return EnumeratedType; }
-    virtual bool isInitialized() const { return initialized_; }
-    int value() const { return value_; }
-    Asn1Enumerated& operator=(int value) { value_ = value; initialized_ = true; }
-  };
-
-  // The base class for an element contained within a SEQUENCE
-  class SequenceElementBase {
-  private:
-    Sequence* container_;
-    // bool optional_;
-  public:
-    SequenceElementBase() : container_(0) { }
-    void setContainer(Sequence& container) { container_ = &container; }
-    const Sequence& getContainer() const { return *container_; }
-    virtual void construct() = 0;
-    virtual void construct(const SequenceElementBase&) = 0;
-    virtual void destroy() = 0;
-    virtual bool isInitialized() const = 0;
-    virtual bool isOptional() const = 0;
-  };
-
-
+  // The base class for an element contained within a CHOICE
   class OptionElementBase {
   protected:
     OptionElementBase(const OptionElementBase&) { }
@@ -154,6 +118,12 @@ namespace Asn1 {
       }
     };
   }
+
+  class Choice2
+  {
+
+  };
+
 
   // Defines an Asn1 Choice object.
   // Example:
@@ -322,142 +292,71 @@ namespace Asn1 {
   };
 
 
-  class Sequence : public Asn1Object {
-    friend class Inserter::Inserter<Sequence>;
-    typedef SequenceElementBase BaseElement_;
-  public:
-    typedef std::vector<BaseElement_*> ContainerType_;
-    typedef Inserter::Inserter<Sequence> Inserter;
-  private:
-    ContainerType_ elements_;
-  public:
-    ContainerType_& elements() { return elements_; }
-  public:
-    template <typename T, bool Optional>
-    struct SequenceElement : public SequenceElementBase {
-      typedef SequenceElement type;
-      Ref<T> element_;
-      SequenceElement() : SequenceElementBase(), element_() { }
-
-      virtual const T& element() {
-        return element_.value();
-      }
-      virtual void construct() {
-        element_.construct();
-      }
-      virtual void construct(const SequenceElementBase& se) {
-        element_.construct(dynamic_cast<const typename T&>(se));
-        //throw std::exception("Not implemented");
-        //if (rhs.isInitialized())
-        //element_ = rhs.e;
-      }
-      virtual void destroy() {
-        element_.destroy();
-      }
-      operator T&() {
-        return element_;
-      }
-      operator T&() const {
-        return element_;
-      }
-      const T& operator=(const typename T& v) {
-        if (!element_.has_element()) {
-          construct();
-        }
-        element_.value() = v;
-        return element_.value();
-      }
-      T& operator()() {
-        if (!element_.has_element()) {
-          construct();
-        }
-        return element_.value();
-      }
-      const T& operator()() const {
-        return element_.value();
-      }
-      bool isInitialized() const {
-        return element_.has_element() && element_.value().isInitialized();
-      }
-      bool isOptional() const {
-        return Optional;
-      }
-      void clear() { if (element_.initialized()) element_.destroy(); /* delete element_; element_ = 0; */ }
-      // Asn1Type getType() const { return SequenceElementType; }
-    };
-    template <typename T> struct Required
-    {
-      typedef typename SequenceElement<T, false>::type type;
-    };
-    template <typename T> struct Optional
-    {
-      typedef typename SequenceElement<T, true>::type type;
-    };
-    Asn1Type getType() const { return SequenceType; }
-    bool isInitialized() const { return false; }  // TODO: This should be defined by derived classes
-  protected:
-    Inserter back_inserter() {
-      Inserter inserter(*this);
-      return inserter;
-    }
-    void operator=(const Sequence& rhs) {
-      std::vector<BaseElement_*>::const_iterator const_it = rhs.elements_.begin();
-      for (std::vector<BaseElement_*>::iterator it = elements_.begin(); it != elements_.end(); ++it) {
-        if ((*const_it)->isInitialized()) {
-          // (*it)->construct(*(*const_it));
-        }
-        else {
-          (*it)->destroy();
-        }
-      }
-      // apAddress = rhs.apAddress;
-    }
-  private:
-    bool initialized;
-    // The number of elements before extention.
-    int basic_count;
-    static bool IsNotInitialized(BaseElement_* element) { return !element->isInitialized(); }
-  public:
-    Sequence(int elements) : basic_count(elements) { }
-    virtual bool isInitialized() { return std::find_if(elements_.begin(), elements_.end(), &IsNotInitialized)==elements_.end(); }
+  // A sequence is simply a grouping of objects
+  // If a sequence contains the "..." marker then it is extensible.
+  // The serializer encodes a sequence by encoding the extensible bit iff it is present then
+  // by encoding the presence of optional+default elements then the elements themselves
+  template<bool Extensible=false>
+  class Sequence {
   };
 
-  class SequenceOfBase : public Asn1Object {
-  private:
-    int min_index_;
-    int max_index_;
-  protected:
-    SequenceOfBase(int min_index, int max_index) : min_index_(min_index), max_index_(max_index) { }
-    SequenceOfBase(const SequenceOfBase& rhs) : min_index_(rhs.min_index_), max_index_(rhs.max_index_) { }
-    // SequenceOfBase& operator=(const SequenceOfBase& rhs) { min_index_ = rhs.min_index_; max_index_ = rhs.max_index_; return *this; }
-    void swap(SequenceOfBase& other) 
-    {
-      std::swap(min_index_, other.min_index_);
-      std::swap(max_index_, other.max_index_);
-    }
+  template<true>
+  class Sequence {
   public:
-    virtual Asn1Type getType() const { return SequenceOfType; }
-    virtual bool isInitialized() const { return false; }
-    virtual void construct(unsigned i) = 0;
-    virtual void destroy(unsigned i) = 0;
-    int min_index() const { return min_index_; }
-    int max_index() const { return min_index_; }
+    extended;
   };
 
-  // SequenceOf
-  // synopsis: Used to define using an ASN1 SEQUENCE OF
-  // Example: class Students : public Asn1::SequenceOf<Student,0,Asn1::Unbounded> { }
-  template <typename T, int MinIndex, int MaxIndex = MinIndex> class SequenceOf : public SequenceOfBase {
+  // Compute field size at compile time when possible
+  template<int range>
+  struct asn_field_size
+  {
+    enum {
+      size = 1 + asn_field_size<range / 2>::size;
+    };
+  };
+  template<> struct asn_field_size<0>
+  {
+    enum { size = 0 };
+  };
+
+  // A sequence-of is basically a vector with min, max constraints
+  // The PER serializer encodes a sequence-of by first writing the number of elements in the
+  // sequence then the elements themselves.
+  // The number of elements is encoded as a bit field whose size is ceil(log2(max_elements - min_elements + 1))
+  // with the value number_of_elements - min_elements.
+  template <int LowerBound, int UpperBound>
+  class SequenceOfBase {
+  //private:
+  //  static const int min_index_ = LowerBound;
+  //  static const int max_index_ = UpperBound;
+  //protected:
+  //  SequenceOfBase() { }
+  //  SequenceOfBase(const SequenceOfBase& rhs) { }
+  //  SequenceOfBase& operator=(const SequenceOfBase& rhs) { }
+  public:
+    static int min_index() const { return LowerBound; }
+    static int max_index() const { return UpperBound; }
+    static int field_size() const {
+      return asn_field_size<UpperBound - LowerBound>::size;
+      //int field_size = 0;
+      //int delta = max_index_ - min_index_ + 1;
+      //while (delta > 1) { ++field_size; delta = (delta+1) / 2; }
+      //return field_size;
+    }
+  };
+
+  template <typename T, int LowerBound, int UpperBound = LowerBound> class SequenceOf : public SequenceOfBase {
   public:
     typedef T PrimitiveType;
     typedef SequenceOf type;
-    typedef typename std::vector<PrimitiveType>::const_iterator Iterator;
+    typedef typename std::vector<PrimitiveType>::const_iterator const_iterator;
+    typedef typename std::vector<PrimitiveType>::iterator iterator;
   private:
-    std::vector<T*> elements_;
-    typedef typename std::vector<typename T*>::const_iterator const_iterator;
-    typedef typename std::vector<typename T*>::iterator iterator;
+    std::vector<T> elements_;
+    typedef typename std::vector<typename T*>::const_iterator const_iterator_;
+    typedef typename std::vector<typename T*>::iterator iterator_;
   public:
-    SequenceOf() : SequenceOfBase(MinIndex, MaxIndex) {}
+    SequenceOf() : SequenceOfBase(LowerBound, UpperBound) {}
     SequenceOf(const SequenceOf&rhs) : SequenceOfBase(rhs)
     {
       for (const_iterator it = rhs.elements_.begin(); it != rhs.elements_.end(); ++it)
@@ -484,7 +383,7 @@ namespace Asn1 {
       return *this;
     }
     T& operator[](unsigned pos) {
-      if (pos<0 || pos>MaxIndex-MinIndex) {
+      if (pos<0 || pos>UpperBound - LowerBound) {
         throw std::out_of_range("Out of bounds");
       }
       while (pos >= elements_.size()) {
@@ -500,10 +399,10 @@ namespace Asn1 {
       std::stringstream ss(asn1_index);
       unsigned i;
       ss >> i;
-      if (i<MinIndex || i>MaxIndex) {
+      if (i<LowerBound || i>UpperBound) {
         throw std::out_of_range("Out of bounds");
       }
-      unsigned pos = i - MinIndex;
+      unsigned pos = i - LowerBound;
       while (pos >= elements_.size()) {
         elements_.push_back(new T());
       }
@@ -623,7 +522,7 @@ namespace Asn1 {
     int getMaximumSize() const { return max_size_; }
     bool isInitialized() const { return initialized_; }
 
-    BitString() : min_size_(0), max_size_(-1), initialized_(false), value_() {}
+    BitString() : min_size_(0), max_size_(Unbounded), initialized_(false), value_() {}
     BitString(int min, int max) : min_size_(min), max_size_(max), initialized_(false), value_() {}
     BitString(const BitString& src) : min_size_(src.min_size_), max_size_(src.max_size_), initialized_(src.initialized_), value_(src.value_) {}
     ~BitString() {}
@@ -634,8 +533,10 @@ namespace Asn1 {
     }
     void swap(BitString& other)
     {
-      std::swap(min_size_, other.min_size_);
-      std::swap(max_size_, other.max_size_);
+      if (min_size_ != other.min_size_ || max_size_ != other.max_size_)
+      {
+        throw std::exception("Cannot swap BitString`s with different boundings");
+      }
       std::swap(initialized_, other.initialized_);
       std::swap(value_, other.value_);
     }
@@ -646,6 +547,17 @@ namespace Asn1 {
     }
     operator const PrimitiveType() const {
       return value_;
+    }
+  };
+
+  template <int MinSize = Unbounded, int MaxSize = MinSize> class Asn1BitString : public BitString {
+  public:
+    Asn1BitString() : BitString(MinSize, MaxSize) {}
+    Asn1BitString(const Asn1BitString& rhs) : BitString(rhs) { }
+    ~Asn1BitString() { }
+    Asn1BitString<MinSize, MaxSize>& operator=(const std::string & s) {
+      BitString::operator=(s);
+      return *this;
     }
   };
 

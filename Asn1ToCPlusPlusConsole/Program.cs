@@ -21,273 +21,6 @@ namespace Asn1ToCPlusPlusConsole
     }
   }
 
-  public interface IAsn1TypeList
-  {
-    void AddType(Asn1Type type);
-  }
-
-  public class Context
-  {
-    public Context()
-    {
-      // Identifiers = new List<Asn1TypedIdentifier>();
-      TypesByModule = new Dictionary<string, List<Asn1Type>>();
-      ImportsByModule = new Dictionary<string, List<Asn1ToCPlusPlusConsole.Imports>>();
-    }
-
-    // public List<Asn1TypedIdentifier> Identifiers { get; }
-    public List<Asn1Type> Types { get { return TypesByModule[moduleName_]; } }
-    public Dictionary<string, List<Asn1Type>> TypesByModule;
-    private string moduleName_;
-    public List<Imports> Imports { get { return ImportsByModule[moduleName_]; } }
-    public Dictionary<string,List<Imports>> ImportsByModule;
-
-    public void SetModule(string moduleName)
-    {
-      moduleName_ = moduleName;
-      if (!TypesByModule.ContainsKey(moduleName_))
-      {
-        TypesByModule[moduleName_] = new List<Asn1Type>();
-        ImportsByModule[moduleName_] = new List<Imports>();
-      }
-    }
-
-    public string GetModuleForType(string typeName)
-    {
-      if (TypesByModule[moduleName_].Any(type => type.Name == typeName ))
-      {
-        return moduleName_;
-      }
-      foreach (var moduleName in TypesByModule.Keys)
-      {
-        if (TypesByModule[moduleName].Any(type => type.Name == typeName))
-        {
-          return moduleName;
-        }
-      }
-      foreach (var moduleName in ImportsByModule.Keys)
-      {
-        foreach (var imports in ImportsByModule[moduleName])
-        {
-          foreach (var pair in imports.symbolsFromModules_)
-          {
-            if (pair.Item2.Contains(typeName))
-            {
-              return pair.Item1;
-            }
-          }
-        }
-      }
-      return null;
-    }
-  }
-
-  public class Definitions
-  {
-
-    public Definitions()
-    {
-    }
-
-
-    public string ModuleName { get; internal set; }
-
-    public void Read(Parser parser, Context context)
-    {
-      // CPDLCAPDUsVersion1 DEFINITIONS ::= BEGIN ... END
-      ModuleName = parser.NextToken();
-      context.SetModule(ModuleName);
-      parser.Expect("DEFINITIONS");
-      parser.Expect("::=");
-      parser.Expect("BEGIN");
-      string keyword = parser.NextToken();
-      while (keyword != "END")
-      {
-        if (keyword.Equals("IMPORTS"))
-        {
-          var imports = new Imports();
-          imports.Read(parser);
-          context.Imports.Add(imports);
-          keyword = parser.NextToken();
-        }
-        else {
-          parser.Expect("::=");
-          var nextToken = parser.NextToken();
-          if (nextToken.Equals("CHOICE"))
-          {
-            Choice choice = new Choice(keyword, ModuleName);
-            choice.Read(parser, context);
-            context.Types.Add(choice);
-            // context.Identifiers.Add(new Asn1TypedIdentifier(keyword, choice));
-            // typesUsed_.UnionWith(choice.getUsedTypes());
-          }
-          else if (nextToken.Equals("SEQUENCE"))
-          {
-            if ("{" == parser.PeekToken())
-            {
-              Sequence seq = new Sequence(keyword, ModuleName);
-              seq.Read(parser, context);
-              context.Types.Add(seq);
-            }
-            else
-            {
-              // Assume it's a SequenceOf
-              SequenceOf seqOf = new SequenceOf(keyword, ModuleName);
-              seqOf.Read(parser, context);
-              context.Types.Add(seqOf);
-            }
-            // typesUsed_.UnionWith(seq.getUsedTypes());
-          }
-          else if (nextToken.Equals("ENUMERATED")) {
-            Enumerated enumerated = new Enumerated(keyword, ModuleName);
-            enumerated.Read(parser);
-            context.Types.Add(enumerated);
-          }
-          else if (nextToken.Equals("RELATIVE-OID")) {
-            RelativeOid oid = new RelativeOid(keyword ,ModuleName);
-            context.Types.Add(oid);
-          }
-          else if (nextToken.Equals("BIT")) // BIT STRING
-          {
-            parser.Expect("STRING");
-            var range = new Range();
-            if (parser.PeekToken("("))
-            {
-              range.Read(parser);
-            }
-            BitString bitString = new BitString(keyword, ModuleName);
-            bitString.Read(parser);
-            context.Types.Add(bitString);
-          }
-          else if (nextToken.Equals("INTEGER"))
-          {
-            var type = new Long(keyword, ModuleName);
-            type.Read(parser);
-            context.Types.Add(type);
-          }
-          else if (nextToken.Equals("IA5String"))
-          {
-            var type = new IA5String(keyword, ModuleName);
-            type.Read(parser);
-            context.Types.Add(type);
-          }
-          else if (nextToken.Equals("NumericString"))
-          {
-            var type = new NumericString(keyword, ModuleName);
-            type.Read(parser);
-            context.Types.Add(type);
-          }
-          else
-          {
-            // Assume this is a typedef
-            var type = new Typedef(keyword, ModuleName, nextToken);
-            // type.Read(parser);
-            context.Types.Add(type);
-          }
-          keyword = parser.NextToken();
-        }
-      }
-    }
-
-    public void WriteDefinitions(StreamWriter cxxWriter, StreamWriter hWriter, Context context)
-    {
-      hWriter.WriteLine("// {0}.h", ModuleName);
-      hWriter.WriteLine("//");
-      hWriter.WriteLine("#pragma once");
-      hWriter.WriteLine();
-      hWriter.WriteLine("#include <iterator>");
-      hWriter.WriteLine("#include <vector>");
-      hWriter.WriteLine("#include \"Asn1.h\"");
-      hWriter.WriteLine();
-
-      cxxWriter.WriteLine("// {0}.cxx", ModuleName);
-      cxxWriter.WriteLine("//");
-      cxxWriter.WriteLine();
-      cxxWriter.WriteLine("#include \"{0}.h\"", ModuleName);
-      cxxWriter.WriteLine();
-
-      foreach (var import in context.ImportsByModule[ModuleName])
-      {
-        import.Write(cxxWriter, hWriter);
-      }
-      if (context.ImportsByModule[ModuleName].Count > 0)
-      {
-        hWriter.WriteLine();
-        cxxWriter.WriteLine();
-      }
-
-      List<Asn1Type> typesDefined = context.TypesByModule[ModuleName];
-
-      hWriter.WriteLine("namespace {0} {{", ModuleName);
-      cxxWriter.WriteLine("namespace {0} {{", ModuleName);
-      foreach (var type in typesDefined)
-      {
-        if (type.IsTypedef() && type.IsBasic())
-        {
-          type.Write(cxxWriter, hWriter);
-        }
-      }
-      foreach (var type in typesDefined)
-      {
-        if (type.IsTypedef())
-        {
-          continue;
-        }
-        hWriter.WriteLine("class {0};", type.Name);
-      }
-      foreach (var type in typesDefined)
-      {
-        if (type.IsTypedef() && !type.IsBasic())
-        {
-          type.Write(cxxWriter, hWriter);
-        }
-      }
-      if (typesDefined.Count > 0) hWriter.WriteLine();
-
-      foreach (var type in typesDefined)
-      {
-        if (!type.IsTypedef())
-        {
-          type.Write(cxxWriter, hWriter);
-        }
-      }
-      hWriter.WriteLine("}");
-      cxxWriter.WriteLine("}");
-    }
-
-    public void WriteSerializers(StreamWriter cxxWriter, StreamWriter hWriter, Context context)
-    {
-      hWriter.WriteLine("{0}Serializer.h", ModuleName);
-      hWriter.WriteLine("//");
-      hWriter.WriteLine("#pragma once");
-      hWriter.WriteLine();
-      hWriter.WriteLine("# include <iterator>");
-      hWriter.WriteLine("# include <vector>");
-      hWriter.WriteLine("# include \"Asn1.h\"");
-      hWriter.WriteLine();
-      hWriter.WriteLine("# include \"{0}.h\"", ModuleName);
-      hWriter.WriteLine("# include \"Asn1PerSerializer.h\"");
-      hWriter.WriteLine();
-      hWriter.WriteLine("namespace {0} {{", ModuleName);
-      hWriter.WriteLine();
-      hWriter.WriteLine("class Serializer : public PerSerializer::Serializer {");
-      hWriter.WriteLine("public:");
-      hWriter.WriteLine("  PerSerializer::BitStream stream;");
-      hWriter.WriteLine("};");
-
-      List<Asn1Type> typesDefined = context.TypesByModule[ModuleName];
-      foreach (var type in typesDefined)
-      {
-        if (!type.IsTypedef())
-        {
-          type.WriteSerializers(cxxWriter, hWriter, context);
-        }
-      }
-
-      hWriter.WriteLine("} // namespace");
-    }
-};
-
   public class NumericString : Asn1Type
   {
     private string identifier_;
@@ -409,9 +142,9 @@ namespace Asn1ToCPlusPlusConsole
     {
       // hWriter.WriteLine("typedef Asn1::Asn1IA5String<{0}, {1}> {2};", range_.Begin, range_.End, identifier_);
       hWriter.WriteLine("class {0} : public Asn1::Asn1IA5String<{1}, {2}> {{", identifier_, range_.Begin, range_.End);
-      hWriter.WriteLine("public:");
-      hWriter.WriteLine("  {0}() : Asn1IA5String() {{ }}", identifier_);
-      hWriter.WriteLine("  {0}(const {0}&src) : Asn1IA5String(src) {{ }}", identifier_);
+      //hWriter.WriteLine("public:");
+      //hWriter.WriteLine("  {0}() : Asn1IA5String() {{ }}", identifier_);
+      //hWriter.WriteLine("  {0}(const {0}&src) : Asn1IA5String(src) {{ }}", identifier_);
       hWriter.WriteLine("};");
     }
 
@@ -471,48 +204,6 @@ namespace Asn1ToCPlusPlusConsole
     public void WriteSerializers(StreamWriter cxxWriter, StreamWriter hWriter, Context context)
     {
       // throw new NotImplementedException();
-    }
-  }
-
-  public class Imports
-  {
-    public List<Tuple<string, List<string>>> symbolsFromModules_ = new List<Tuple<string, List<string>>>();
-
-    public Imports()
-    {
-    }
-
-    public void Read(Parser parser)
-    {
-      while (! parser.PeekToken(";"))
-      {
-        var symbols = new List<string>();
-        symbols.Add(parser.NextToken());
-        while (parser.PeekToken(","))
-        {
-          parser.NextToken();
-          var symbol = parser.NextToken();
-          symbols.Add(symbol);
-        }
-        parser.Expect("FROM");
-        var module = parser.NextToken();
-        Tuple<string, List<string>> symbolsFromModule = new Tuple<string, List<string>>(module, symbols);
-        symbolsFromModules_.Add(symbolsFromModule);
-      }
-      parser.NextToken();
-
-    }
-
-    public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
-    {
-      foreach (var module in symbolsFromModules_)
-      {
-        cxxWriter.WriteLine("# include \"{0}.h\"", module.Item1);
-        foreach (var import in module.Item2)
-        {
-          hWriter.WriteLine("namespace {0} {{ class {1}; }}", module.Item1, import);
-        }
-      }
     }
   }
 
@@ -790,12 +481,14 @@ namespace Asn1ToCPlusPlusConsole
       hWriter.WriteLine("public:");
       hWriter.WriteLine("  {0}() : BitString() {{ }}", typeName_);
       hWriter.WriteLine("  {0}(int min, int max) : BitString(min, max) {{ }}", typeName_);
-      hWriter.WriteLine("  {0}(const {0}&src) : BitString(src) {{ }}", typeName_);
-      hWriter.WriteLine("  const {0}& operator= (const {0}&src) {{", typeName_);
-      hWriter.WriteLine("    return dynamic_cast<const {0}&>(BitString::operator=(src));", typeName_);
-      hWriter.WriteLine("  }");
+      //hWriter.WriteLine("  {0}(const {0}&src) : BitString(src) {{ }}", typeName_);
+      //hWriter.WriteLine("  const {0}& operator= (const {0}&src) {{", typeName_);
+      //hWriter.WriteLine("    BitString::operator=(src);");
+      //hWriter.WriteLine("    return *this;");
+      //hWriter.WriteLine("  }");
       hWriter.WriteLine("  const {0}& operator= (const PrimitiveType v) {{", typeName_);
-      hWriter.WriteLine("    return dynamic_cast<const {0}&>(BitString::operator=(v));", typeName_);
+      hWriter.WriteLine("    BitString::operator=(v);");
+      hWriter.WriteLine("    return *this;");
       hWriter.WriteLine("  }");
       hWriter.WriteLine("};");
     }
@@ -1101,12 +794,21 @@ namespace Asn1ToCPlusPlusConsole
       if (isExtensible())
       {
         bool extended = false; // TODO: set to true if extended
-        hWriter.WriteLine("  s.stream << {0};", extended ? "true" : "false");
-        hWriter.WriteLine("  s.stream.push_back(m.{0}.isInitialized() ? 1 : 0, 1);");
+        hWriter.WriteLine("  s.stream << {0};", extended ? "true" : "false"); // extension bit
       }
       foreach (var item in types)
       {
-        hWriter.WriteLine("  s.stream.push_back(m.{0}.isInitialized() ? 1 : 0, 1);");
+        // if item is DEFAULT or OPTIONAL write true if using default or present; false otherwise
+        if (item.optional)
+        {
+          hWriter.WriteLine("  s.stream << {0}.isInitialized();", item.typeInfo.TypeName);
+        }
+        // todo: add same for DEFAULT
+      }
+
+      foreach (var item in types)
+      {
+        hWriter.WriteLine("  s.stream.push_back(m.{0}.isInitialized() ? 1 : 0, 1);", item.typeInfo);
 
         //Serializer & operator >> (Serializer & s, ATCMessageHeader & m) {
         //  // no extension marker
@@ -1120,8 +822,14 @@ namespace Asn1ToCPlusPlusConsole
         //  if (has_logicalAck) s >> m.logicalAck();
         //  return s;
         //}
-        throw new NotImplementedException();
+        // TODO: (2) throw new NotImplementedException();
       }
+      if (isExtensible()) // && extended
+      {
+        // serialize extensible part
+      }
+      hWriter.WriteLine("};");
+      hWriter.WriteLine();
     }
   }
 
@@ -1134,6 +842,8 @@ namespace Asn1ToCPlusPlusConsole
       public TypeInfo typeInfo;
       public bool optional; // unused
       public string identifier;
+
+      public bool extension { get; internal set; }
     }
 
     string Asn1Type.Name { get { return typeName_; } }
@@ -1143,6 +853,7 @@ namespace Asn1ToCPlusPlusConsole
     private List<Element> choiceList_;
 
     public void setExtensible() { extensible_ = true; }
+    public bool isExtensible() { return extensible_; }
 
     public Choice(string typeName, string moduleName)
     {
@@ -1159,32 +870,28 @@ namespace Asn1ToCPlusPlusConsole
       List<Asn1Type> typesDefined_ = context.TypesByModule[ModuleName];
       parser.Expect("{");
       choiceList_ = new List<Element>();
-      TypeInfo type;
       string identifier;
       do
       {
         identifier = parser.NextToken();
-        type = new TypeInfo(ModuleName);
         if (identifier == "...")
         {
           setExtensible();
         }
         else
         {
+          TypeInfo type;
+          type = new TypeInfo(ModuleName);
           type.Read(parser, context);
           var info = new Element(ModuleName);
           info.identifier = identifier;
           info.typeInfo = type;
+          info.extension = isExtensible();
           choiceList_.Add(info);
         }
         identifier = parser.NextToken();
       } while (identifier == ",");
       if (identifier != "}") throw new Exception(string.Format("Invalid definition format. Expected } keyword, found {0}", identifier));
-    }
-
-    public bool isExtensible()
-    {
-      return extensible_;
     }
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
@@ -1253,115 +960,21 @@ namespace Asn1ToCPlusPlusConsole
       return IsTypedef();
     }
 
+    // 22. Encoding the choice type 
+    // NOTE – (Tutorial) A choice type is encoded by encoding an index
+    // specifying the chosen alternative. This is encoded
+    // as for a constrained integer (unless the extension marker is present in
+    // the choice type, in which case it is a normally small non-negative
+    // whole number) and would therefore typically occupy a fixed length
+    // bit-field of the minimum number of bits needed to encode the index.
+    // (Although it could in principle be arbitrarily large.) This is followed
+    // by the encoding of the chosen alternative, with alternatives that are
+    // extension additions encoded as if they were the value of an open type
+    // field. Where the choice has only one alternative, there is no encoding
+    // for the index.
     public void WriteSerializers(StreamWriter cxxWriter, StreamWriter hWriter, Context context)
     {
-      throw new NotImplementedException();
-    }
-  }
-
-  public class Parser
-  {
-    private StreamReader reader;
-    private Queue<string> tokens = new Queue<string>();
-    private bool ReadSome()
-    {
-      while (tokens.Count() < 1)
-      {
-        string line = reader.ReadLine();
-        if (line == null) return false;
-        if (line.Contains("--")) line = line.Substring(0, line.IndexOf("--"));
-        line = line.Trim();
-        if (string.IsNullOrWhiteSpace(line)) continue;
-        char quote = '\0';
-        int first = 0;
-        bool quoted = false;
-        for (int i = 0; i < line.Length; ++i)
-        {
-          if (quoted && line[i] == quote) { tokens.Enqueue(line.Substring(first, i - first)); first = i + 1; quoted = false; continue; }
-          if (quoted) continue;
-          if (char.IsWhiteSpace(line[i]))
-          {
-            if (first == i) { ++first; continue; }
-            tokens.Enqueue(line.Substring(first, i - first)); first = i + 1; continue;
-          }
-          if (line[i] == '\'' || line[i] == '\"')
-          {
-            if (first != i) { tokens.Enqueue(line.Substring(first, i - first)); }
-            quoted = true; quote = line[i]; first = i + 1;
-            continue;
-          }
-          if (",;[]{}<>():".Contains(line[i]))
-          {
-            if (first != i) tokens.Enqueue(line.Substring(first, i - first));
-            if ((line + "XX").Substring(i, 3) == "::=")
-            {
-              tokens.Enqueue("::="); i += 2; first = i + 1; continue;
-            }
-            else
-            {
-              tokens.Enqueue("" + line[i]); first = i + 1; continue;
-            }
-          }
-          if (line[i] == '.')
-          {
-            if (first != i) tokens.Enqueue(line.Substring(first, i - first));
-            var lineXX = line.Substring(i) + "XX";
-            if (lineXX.StartsWith("..."))
-            {
-              tokens.Enqueue("..."); i += 2;
-            }
-            else if (lineXX.StartsWith(".."))
-            {
-              tokens.Enqueue(".."); ++i;
-            }
-            else
-            {
-              tokens.Enqueue(".");
-            }
-            first = i + 1; continue;
-          }
-          if (i == line.Length - 1) { tokens.Enqueue(line.Substring(first)); }
-        }
-      }
-      return true;
-    }
-
-    public Parser(StreamReader reader)
-    {
-      this.reader = reader;
-    }
-
-    public string NextToken()
-    {
-      if (ReadSome()) return tokens.Dequeue();
-      return null;
-    }
-
-    public string PeekToken()
-    {
-      if (ReadSome()) return tokens.Peek();
-      return null;
-    }
-
-    public bool PeekToken(string match)
-    {
-      return match == PeekToken();
-    }
-
-    public void Expect(string expected)
-    {
-      var token = NextToken();
-      if (token != expected) throw new Exception(string.Format("Invalid definition format. Expected {0} keyword, found {1}", expected, token));
-    }
-
-    public bool HasToken(string match)
-    {
-      if (match == PeekToken())
-      {
-        NextToken();
-        return true;
-      }
-      return false;
+      // TODO: (1) throw new NotImplementedException();
     }
   }
 
@@ -1370,16 +983,16 @@ namespace Asn1ToCPlusPlusConsole
     static void Main(string[] args)
     {
       string fname = args[0];
-      string destFolder = args[1];
+      string destFolder = args.Count() > 1 ? args[1] : null;
       Console.WriteLine("Input file:" + fname);
       Console.WriteLine("Dest folder:" + destFolder);
       if (File.Exists(fname))
       {
-        ConvertToCPlusPlus(fname);
+        ConvertToCPlusPlus(fname, destFolder);
       }
     }
 
-    private static void ConvertToCPlusPlus(string fname)
+    private static void ConvertToCPlusPlus(string fname, string targetPath)
     {
       List<Definitions> asnModule = new List<Definitions>();
       Context context = new Context();
@@ -1395,7 +1008,7 @@ namespace Asn1ToCPlusPlusConsole
           nextToken = parser.PeekToken();
         }
       }
-      string targetFilePath = Path.GetDirectoryName(fname);
+      string targetFilePath = string.IsNullOrEmpty(targetPath) ? Path.GetDirectoryName(fname) : targetPath;
       foreach (var definitions in asnModule)
       {
         var cxxFileName = targetFilePath + Path.DirectorySeparatorChar + definitions.ModuleName + ".cxx";
