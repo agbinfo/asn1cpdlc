@@ -122,7 +122,7 @@ namespace Asn1ToCPlusPlusConsole
   public class IA5String : Asn1Type
   {
     public string ModuleName { get; internal set; }
-    string Asn1Type.Name { get { return string.Format("Asn1::Asn1IA5String<{0}, {1}>", range_.Begin, range_.End); } }
+    string Asn1Type.Name { get { return string.Format("Asn1::IA5String<{0}, {1}>", range_.Begin, range_.End); } }
     private string identifier_;
     private Range range_;
 
@@ -140,12 +140,20 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      // hWriter.WriteLine("typedef Asn1::Asn1IA5String<{0}, {1}> {2};", range_.Begin, range_.End, identifier_);
-      hWriter.WriteLine("class {0} : public Asn1::Asn1IA5String<{1}, {2}> {{", identifier_, range_.Begin, range_.End);
-      //hWriter.WriteLine("public:");
-      //hWriter.WriteLine("  {0}() : Asn1IA5String() {{ }}", identifier_);
-      //hWriter.WriteLine("  {0}(const {0}&src) : Asn1IA5String(src) {{ }}", identifier_);
-      hWriter.WriteLine("};");
+      if (range_.Begin == range_.End)
+      {
+        hWriter.WriteLine("  class {0} : public Asn1::IA5String<{1}> {{", identifier_, range_.End);
+      }
+      else
+      {
+        hWriter.WriteLine("  class {0} : public Asn1::IA5String<{1}, {2}> {{", identifier_, range_.Begin, range_.End);
+      }
+      hWriter.WriteLine("  public:");
+      hWriter.WriteLine("    {0}& operator=(std::string s) {{", identifier_);
+      hWriter.WriteLine("      IA5String::operator=(s);");
+      hWriter.WriteLine("      return *this;");
+      hWriter.WriteLine("    }");
+      hWriter.WriteLine("  };");
     }
 
     public bool IsTypedef()
@@ -167,7 +175,7 @@ namespace Asn1ToCPlusPlusConsole
   public class Long : Asn1Type
   {
     public string ModuleName { get; internal set; }
-    string Asn1Type.Name { get { return string.Format("Asn1::Asn1Int<{0}, {1}>", range_.Begin, range_.End); } }
+    string Asn1Type.Name { get { return string.Format("Asn1::Integer<{0}, {1}>", range_.Begin, range_.End); } }
     private string identifier_;
     private Range range_;
 
@@ -187,7 +195,7 @@ namespace Asn1ToCPlusPlusConsole
     {
       // typedef Asn1::Asn1Int < -600, 70000 > LevelFeet;    // unit = Feet, Range (-600..70000), resolution = 10
       // hWriter.WriteLine("typedef Asn1::Asn1Int<-600, 70000> LevelFeet;    // unit = Feet, Range (-600..70000), resolution = 10");
-      hWriter.WriteLine("typedef Asn1::Asn1Int<{0}, {1}> {2};", range_.Begin, range_.End, identifier_);
+      hWriter.WriteLine("  typedef Asn1::Integer<{0}, {1}> {2};", range_.Begin, range_.End, identifier_);
       hWriter.Flush();
     }
 
@@ -371,7 +379,7 @@ namespace Asn1ToCPlusPlusConsole
     {
       get
       {
-        return string.Format("Asn1::SequenceOf<{0}, {1}, {2}>", innerType_.TypeName, size_.MinValue, size_.MaxValue);
+        return string.Format("Asn1::SequenceOf<{1}, {2}, {0}>", innerType_.TypeName, size_.MinValue, size_.MaxValue);
       }
     }
 
@@ -401,7 +409,7 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      hWriter.WriteLine("typedef Asn1::SequenceOf<{0},{2},{3}> {1};", innerType_.TypeName, identifier_, size_.MinValue, size_.MaxValue);
+      hWriter.WriteLine("  typedef Asn1::SequenceOf<{0},{2},{3}> {1};", innerType_.TypeName, identifier_, size_.MinValue, size_.MaxValue);
       hWriter.Flush();
     }
 
@@ -537,7 +545,7 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      hWriter.WriteLine("typedef Asn1::Oid {0};", typeName_);
+      hWriter.WriteLine("  typedef Asn1::Oid {0};", typeName_);
     }
 
     public bool IsTypedef()
@@ -702,8 +710,8 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      hWriter.WriteLine("class {0} : public Asn1::Sequence {{", typeName_);
-      hWriter.WriteLine("public:");
+      hWriter.WriteLine("  class {0} {{", typeName_);
+      hWriter.WriteLine("  public:");
       foreach (var item in types)
       {
         //if ("SEQUENCE" == item.typeInfo.TypeName)
@@ -747,26 +755,14 @@ namespace Asn1ToCPlusPlusConsole
 
         if (item.optional)
         {
-          hWriter.WriteLine("  Optional<{0}>::type {1};", identifier, item.identifier);
+          hWriter.WriteLine("    Asn1::Optional<{0}>::type {1};", identifier, item.identifier);
         }
         else
         {
-          hWriter.WriteLine("  Required<{0}>::type {1};", identifier, item.identifier);
+          hWriter.WriteLine("    {0} {1};", identifier, item.identifier);
         }
       }
-      hWriter.WriteLine("  {0}() : Sequence({1}) {{", typeName_, types.Count());
-      if (types.Count() > 0)
-      {
-        hWriter.WriteLine("    Sequence::Inserter it = back_inserter();");
-        hWriter.Write("    it");
-      }
-      foreach (var item in types)
-      {
-        hWriter.Write(" << {0}", item.identifier);
-      }
-      hWriter.WriteLine(";");
-      hWriter.WriteLine("  }");
-      hWriter.WriteLine("};");
+      hWriter.WriteLine("  };");
       hWriter.WriteLine();
       hWriter.Flush();
     }
@@ -910,46 +906,34 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      hWriter.WriteLine("class {0} : public Asn1::Choice {{", typeName_);
-      hWriter.WriteLine("public:");
-      hWriter.WriteLine("  typedef {0} PrimitiveType;", typeName_);
-      hWriter.WriteLine("  enum {");
+      hWriter.WriteLine("  class {0} : private Asn1::Choice {{", typeName_);
+      hWriter.WriteLine("  public:");
+      var choice_index = 0;
       foreach (var choice in choiceList_)
       {
-        hWriter.WriteLine("    {0}_idx = {1}{2}", choice.identifier, choice.typeInfo.Tag, choice == choiceList_.Last() ? "" : ",");
+        hWriter.WriteLine("    struct {0} {{ typedef {1} ReturnType; static const int Index = {2}; }};",
+          choice.identifier, choice.typeInfo.TypeName, choice_index++);
       }
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    template <typename T>");
+      hWriter.WriteLine("    typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }");
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    template <typename T>");
+      hWriter.WriteLine("    typename T::ReturnType & as() { return Choice::as<T>(); }");
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    template <typename T>");
+      hWriter.WriteLine("    typename const T::ReturnType & as() const { return Choice::as<T>(); }");
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    template <typename T>");
+      hWriter.WriteLine("    bool isa() const { return Choice::isa<T>(); }");
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    bool isassigned() const { return Choice::choice_ != nullptr; }");
+      hWriter.WriteLine("    size_t index() const { return Choice::choiceIndex_ - first_index; }");
+      hWriter.WriteLine("    size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }");
+      hWriter.WriteLine("");
+      hWriter.WriteLine("    static const size_t first_index = 0;");
+      hWriter.WriteLine("    static const size_t last_index = {0};", choice_index - 1);
       hWriter.WriteLine("  };");
-      hWriter.WriteLine("  virtual bool extensible() const {{ return {0}; }}", isExtensible() ? "true" : "false");
-      foreach (var choice in choiceList_)
-      {
-        string type;
-        if ("SEQUENCE OF" == choice.typeInfo.TypeName)
-        {
-          // hWriter.WriteLine("  typedef {1} SequenceOf_{2};", item.typeInfo.InnerType.Name, (item.typeInfo.InnerType as SequenceOf).InnerTypeName);
-          type = choice.typeInfo.InnerType.Name + " ";
-        }
-        else
-        {
-          if (choice.typeInfo.ModuleName != ModuleName)
-          {
-            type = choice.typeInfo.ModuleName + "::" + choice.typeInfo.TypeName;
-          }
-          else {
-            type = choice.typeInfo.TypeName;
-          }
-        }
-        hWriter.WriteLine("  Option<{0}_idx, {1}>::type {0}();", choice.identifier, type);
-        //ProtectedGroundPDUs::Option<ProtectedGroundPDUs::abortUser_idx, PMCPDLCUserAbortReason>::type ProtectedGroundPDUs::abortUser()
-        //{
-        //  return Option<abortUser_idx, PMCPDLCUserAbortReason>::getElement(*this);
-        //}
-        cxxWriter.WriteLine("{0}::Option<{0}::{1}_idx, {2}>::type {0}::{1}()", typeName_, choice.identifier, type);
-        cxxWriter.WriteLine("{");
-        cxxWriter.WriteLine("  return Option<{0}_idx, {1}>::getElement(*this);", choice.identifier, type);
-        cxxWriter.WriteLine("}");
-      }
-      hWriter.WriteLine("  {0}() : Choice() {{ }}", typeName_);
-      hWriter.WriteLine("};");
       hWriter.WriteLine();
       hWriter.Flush();
     }
@@ -989,6 +973,26 @@ namespace Asn1ToCPlusPlusConsole
     public void WriteSerializers(StreamWriter cxxWriter, StreamWriter hWriter, Context context)
     {
       // TODO: (1) throw new NotImplementedException();
+      hWriter.WriteLine("  Asn1::Serializer& operator<<(Asn1::Serializer& s, const {0}& v) {{", typeName_);
+      hWriter.WriteLine("    if (!v.isassigned() || v.index() > APAddress::shortTsap::Index) {");
+      hWriter.WriteLine("      throw Asn1::unassigned_exception();");
+      hWriter.WriteLine("    }");
+      hWriter.WriteLine("    else {");
+      hWriter.WriteLine("      s.push_back(v.index(), Asn1::bitwidth({0}::last_index - {0}::first_index));", typeName_);
+      hWriter.WriteLine("    }");
+      hWriter.WriteLine("    switch (v.index()) {");
+      foreach (var x in choiceList_)
+      {
+        hWriter.WriteLine("    case {0}::{1}::Index:", typeName_, x.identifier);
+        hWriter.WriteLine("      s << v.as< {0}::{1} > ();", typeName_, x.identifier);
+        hWriter.WriteLine("      break;");
+      }
+      hWriter.WriteLine("    default:");
+      hWriter.WriteLine("      break;");
+      hWriter.WriteLine("    }");
+      hWriter.WriteLine("    return s;");
+      hWriter.WriteLine("  }");
+      hWriter.WriteLine("");
     }
   }
 

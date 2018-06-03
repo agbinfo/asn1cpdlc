@@ -1,1 +1,6 @@
 Generated/
+Asn1ToCPlusPlusConsole/bin/Debug/
+Asn1ToCPlusPlusConsole/obj/
+ConsoleApplication1/Debug/
+*.db
+*.opendb

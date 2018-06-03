@@ -146,6 +146,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Asn1.h" />
+    <ClInclude Include="Asn1_old.h" />
     <ClInclude Include="Asn1PerSerializer.h" />
     <ClInclude Include="CMMessageSetVersion1.h" />
     <ClInclude Include="CPDLCAPDUsVersion1.h" />
