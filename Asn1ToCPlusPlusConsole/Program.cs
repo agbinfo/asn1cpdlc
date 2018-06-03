@@ -298,6 +298,20 @@ namespace Asn1ToCPlusPlusConsole
         parser.Expect("STRING");
         TypeName = "Asn1::BitString";
       }
+      else if (TypeName == "OCTET")
+      {
+        parser.Expect("STRING");
+        TypeName = "Asn1::OctetString";
+        var peek = parser.PeekToken();
+        if ("(" == peek) {
+          parser.Expect("(");
+          parser.Expect("SIZE");
+          Size size = new Size();
+          size.Read(parser);
+          innerCount_ = size.MaxValue;
+          parser.Expect(")");
+        }
+      }
       else if (TypeName == "NULL")
       {
         TypeName = "Asn1::Asn1NULL";
