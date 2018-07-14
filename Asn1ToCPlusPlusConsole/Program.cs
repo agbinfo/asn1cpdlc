@@ -99,7 +99,7 @@ namespace Asn1ToCPlusPlusConsole
 
     public void Write(StreamWriter cxxWriter, StreamWriter hWriter)
     {
-      hWriter.WriteLine("typedef {0} {1};", alias_, typeName_);
+      hWriter.WriteLine("  typedef {0} {1};", alias_, typeName_);
       hWriter.Flush();
     }
 
@@ -755,7 +755,7 @@ namespace Asn1ToCPlusPlusConsole
 
         if (item.optional)
         {
-          hWriter.WriteLine("    Asn1::Optional<{0}>::type {1};", identifier, item.identifier);
+          hWriter.WriteLine("    Asn1::Optional<{0}> {1};", identifier, item.identifier);
         }
         else
         {

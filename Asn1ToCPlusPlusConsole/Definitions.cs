@@ -161,7 +161,7 @@ namespace Asn1ToCPlusPlusConsole
         {
           continue;
         }
-        hWriter.WriteLine("class {0};", type.Name);
+        hWriter.WriteLine("  class {0};", type.Name);
       }
       foreach (var type in typesDefined)
       {

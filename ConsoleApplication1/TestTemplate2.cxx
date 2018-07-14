@@ -41,33 +41,68 @@ namespace Cm {
   class Response;
   typedef Response CMContactResponse;
 
-  //class CMAircraftMessage : private Asn1::Choice {
-  //public:
-  //  struct cmLogonRequest { typedef CMLogonRequest ReturnType; static const int Index = 0; };
-  //  struct cmContactResponse { typedef CMContactResponse ReturnType; static const int Index = 1; };
-  //  struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 2; };
-  //  // CM version 2 only
-  //  struct cmServerFacilityQueryRequest { typedef CMServerFacilityQueryRequest ReturnType; static const int Index = 3; };
+  class CMAircraftMessage : private Asn1::Choice {
+  public:
+    struct cmLogonRequest { typedef CMLogonRequest ReturnType; static const int Index = 0; };
+    struct cmContactResponse { typedef CMContactResponse ReturnType; static const int Index = 1; };
+    struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 2; };
+    // CM version 2 only
+    struct cmServerFacilityQueryRequest { typedef CMServerFacilityQueryRequest ReturnType; static const int Index = 3; };
 
-  //  template <typename T>
-  //  typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
+    template <typename T>
+    typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
 
-  //  template <typename T>
-  //  typename T::ReturnType & as() { return Choice::as<T>(); }
+    template <typename T>
+    typename T::ReturnType & as() { return Choice::as<T>(); }
 
-  //  template <typename T>
-  //  typename const T::ReturnType & as() const { return Choice::as<T>(); }
+    template <typename T>
+    typename const T::ReturnType & as() const { return Choice::as<T>(); }
 
-  //  template <typename T>
-  //  bool isa() const { return Choice::isa<T>(); }
+    template <typename T>
+    bool isa() const { return Choice::isa<T>(); }
 
-  //  bool isassigned() const { return Choice::choice_ != nullptr; }
-  //  size_t index() const { return Choice::choiceIndex_ - first_index; }
-  //  size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }
+    bool isassigned() const { return Choice::choice_ != nullptr; }
+    size_t index() const { return Choice::choiceIndex_ - first_index; }
+    size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }
 
-  //  static const size_t first_index = 0;
-  //  static const size_t last_index = 3;
-  //};
+    static const size_t first_index = 0;
+    static const size_t last_index = 3;
+  };
+
+  class CMGroundMessage : private Asn1::Choice
+  {
+  public:
+    //struct cmLogonResponse { typedef CMLogonResponse ReturnType; static const int Index = 0; };
+    //struct cmUpdate { typedef CMUpdate ReturnType; static const int Index = 0; };
+    //struct cmContactRequest { typedef CMontactRequest ReturnType; static const int Index = 0; };
+    //struct cmForwardRequest { typedef CMForwardRequest ReturnType; static const int Index = 0; };
+    struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 0; };
+    // ... -- All PDUs after extensibility are CM Version 2 only
+    //struct cmServerFacilityQueryResponse { typedef CMServerFacilityQueryResponse ReturnType; static const int Index = 0; };
+    //struct cmServerFacilityUpdate { typedef CMAbortReason ReturnType; static const int Index = 0; };
+    //struct cmSecureLogonResponse { typedef CMSecureLogonResponse ReturnType; static const int Index = 0; };
+    //struct cmSecureUpdate { typedef CMSecureUpdate ReturnType; static const int Index = 0; };
+    //struct cmEnhancedForwardRequest { typedef CMEnhancedForwardRequest ReturnType; static const int Index = 0; };
+
+    template <typename T>
+    typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
+
+    template <typename T>
+    typename T::ReturnType & as() { return Choice::as<T>(); }
+
+    template <typename T>
+    typename const T::ReturnType & as() const { return Choice::as<T>(); }
+
+    template <typename T>
+    bool isa() const { return Choice::isa<T>(); }
+
+    bool isassigned() const { return Choice::choice_ != nullptr; }
+    size_t index() const { return Choice::choiceIndex_ - first_index; }
+    size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }
+
+    static const size_t first_index = 0;
+    static const size_t last_index = 10;
+  };
 
   class ShortTsap
   {
@@ -169,13 +204,12 @@ namespace Cm {
   class AEQualifierVersion {};
   class DateTime {};
 
-  class CMLogonRequest
-  {
+  class CMLogonRequest {
   public:
     AircraftFlightIdentification aircraftFlightIdentification;
     LongTsap cMLongTSAP;
-    Asn1::Optional<Asn1::SequenceOf<1, 256, AEQualifierVersionAddress>> groundInitiatedApplications;
-    Asn1::Optional<Asn1::SequenceOf<1, 256, AEQualifierVersion>> airOnlyInitiatedApplications;
+    Asn1::Optional<Asn1::SequenceOf<1, 256, AEQualifierVersionAddress> > groundInitiatedApplications;
+    Asn1::Optional<Asn1::SequenceOf<1, 256, AEQualifierVersion> > airOnlyInitiatedApplications;
     Asn1::Optional<FacilityDesignation> facilityDesignation;
     Asn1::Optional<Airport> airportDeparture;
     Asn1::Optional<Airport> airportDestination;
@@ -203,33 +237,33 @@ namespace Cm {
   class CMAbortReason {};
   class CMServerFacilityQueryRequest {};
 
-  class CMAircraftMessage : private Asn1::Choice {
-  public:
-    struct cmLogonRequest { typedef CMLogonRequest ReturnType; static const int Index = 0; };
-    struct cmContactResponse { typedef CMContactResponse ReturnType; static const int Index = 1; };
-    struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 2; };
-    // CM version 2 only
-    struct cmServerFacilityQueryRequest { typedef CMServerFacilityQueryRequest ReturnType; static const int Index = 3; };
+  //class CMAircraftMessage : private Asn1::Choice {
+  //public:
+  //  struct cmLogonRequest { typedef CMLogonRequest ReturnType; static const int Index = 0; };
+  //  struct cmContactResponse { typedef CMContactResponse ReturnType; static const int Index = 1; };
+  //  struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 2; };
+  //  // CM version 2 only
+  //  struct cmServerFacilityQueryRequest { typedef CMServerFacilityQueryRequest ReturnType; static const int Index = 3; };
 
-    template <typename T>
-    typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
+  //  template <typename T>
+  //  typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
 
-    template <typename T>
-    typename T::ReturnType & as() { return Choice::as<T>(); }
+  //  template <typename T>
+  //  typename T::ReturnType & as() { return Choice::as<T>(); }
 
-    template <typename T>
-    typename const T::ReturnType & as() const { return Choice::as<T>(); }
+  //  template <typename T>
+  //  typename const T::ReturnType & as() const { return Choice::as<T>(); }
 
-    template <typename T>
-    bool isa() const { return Choice::isa<T>(); }
+  //  template <typename T>
+  //  bool isa() const { return Choice::isa<T>(); }
 
-    bool isassigned() const { return Choice::choice_ != nullptr; }
-    size_t index() const { return Choice::choiceIndex_ - first_index; }
-    size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }
+  //  bool isassigned() const { return Choice::choice_ != nullptr; }
+  //  size_t index() const { return Choice::choiceIndex_ - first_index; }
+  //  size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }
 
-    static const size_t first_index = 0;
-    static const size_t last_index = 3;
-  };
+  //  static const size_t first_index = 0;
+  //  static const size_t last_index = 3;
+  //};
 
   Asn1::Serializer& operator << (Asn1::Serializer& os, const CMAircraftMessage& e)
   {
@@ -257,40 +291,6 @@ namespace Cm {
     }
     return os;
   }
-
-  class CMGroundMessage : private Asn1::Choice
-  {
-  public:
-    //struct cmLogonResponse { typedef CMLogonResponse ReturnType; static const int Index = 0; };
-    //struct cmUpdate { typedef CMUpdate ReturnType; static const int Index = 0; };
-    //struct cmContactRequest { typedef CMontactRequest ReturnType; static const int Index = 0; };
-    //struct cmForwardRequest { typedef CMForwardRequest ReturnType; static const int Index = 0; };
-    struct cmAbortReason { typedef CMAbortReason ReturnType; static const int Index = 0; };
-    // ... -- All PDUs after extensibility are CM Version 2 only
-    //struct cmServerFacilityQueryResponse { typedef CMServerFacilityQueryResponse ReturnType; static const int Index = 0; };
-    //struct cmServerFacilityUpdate { typedef CMAbortReason ReturnType; static const int Index = 0; };
-    //struct cmSecureLogonResponse { typedef CMSecureLogonResponse ReturnType; static const int Index = 0; };
-    //struct cmSecureUpdate { typedef CMSecureUpdate ReturnType; static const int Index = 0; };
-    //struct cmEnhancedForwardRequest { typedef CMEnhancedForwardRequest ReturnType; static const int Index = 0; };
-
-    template <typename T>
-    typename T::ReturnType & operator[](const T&) { return Choice::as<T>(); }
-
-    template <typename T>
-    typename T::ReturnType & as() { return Choice::as<T>(); }
-
-    template <typename T>
-    typename const T::ReturnType & as() const { return Choice::as<T>(); }
-
-    template <typename T>
-    bool isa() const { return Choice::isa<T>(); }
-
-    static const size_t first_index = 0;
-    static const size_t last_index = 3;
-    bool isassigned() const { return Choice::choice_ != nullptr; }
-    size_t index() const { return Choice::choiceIndex_ - first_index; }
-    size_t bitwidth() const { return Asn1::bitwidth(last_index - first_index); }  // number of bits needed to encode choice
-  };
 
   class Level : private Asn1::Choice
   {
