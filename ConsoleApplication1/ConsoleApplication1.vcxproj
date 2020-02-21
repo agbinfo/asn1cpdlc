@@ -22,7 +22,6 @@
     <ProjectGuid>{D748FF8A-6F52-4F29-B0AB-3F6BB2DB93A1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>ConsoleApplication1</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -146,7 +145,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Asn1.h" />
-    <ClInclude Include="Asn1_old.h" />
     <ClInclude Include="Asn1PerSerializer.h" />
     <ClInclude Include="CMMessageSetVersion1.h" />
     <ClInclude Include="CPDLCAPDUsVersion1.h" />
@@ -167,7 +165,7 @@
     <ClCompile Include="PMCPDLCMessageSetVersion1.cxx">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="Test.cpp">
+    <ClCompile Include="Test.cxx">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">true</ExcludedFromBuild>
     </ClCompile>
     <ClCompile Include="TestTemplate2.cxx" />

@@ -1,262 +1,613 @@
 #pragma once
 
-#include <utility>
-#include <memory>
+#include <algorithm>
+#include <iostream>
+#include <iterator>
 #include <string>
 #include <vector>
-#include <iostream>
+#include <sstream>
+#include <memory>
 
-#pragma warning(disable : 4709)
 namespace Asn1 {
-  struct bound_exception {};
-  struct unassigned_exception {};
+  class Sequence;
+  class Choice;
 
-  class Serializer
+  const int Unbounded = INT_MIN;
+
+  // Primitive Types
+  enum Asn1Type {
+    Null,
+    Boolean,
+    Integer,
+    EnumeratedType,
+    Real,
+    Bitstring,
+    OctetString,
+    SequenceType,
+    SequenceOfType,
+    //Set,
+    SetOf,
+    ChoiceType,
+    Open,
+    ObjectIdentifier,
+    RelativeObjectIdentifier,
+    EmbeddedPdv,
+    External,
+    RestrictedCharacterString,
+    UnrestrictedCharacterString,
+    OID
+  };
+
+  // The effective permitted-alphabet constraints are PER-visible only for these types:
+  enum Asn1StringType {
+    Numeric,
+    Printable,
+    Visible,
+    ISO646 = Asn1::Visible,
+    IA5,
+    BMP,
+    Universal,
+    // not mentionned? should they?
+    Bit,
+    Octet
+  };
+
+  class Asn1Any
   {
+  protected:
+    virtual ~Asn1Any() {}
+  };
+
+  template <typename Derived, Asn1Type BaseType>
+  class Asn1Object : public Asn1Any {
   public:
-    void write(std::ostream&) const {} // copies content to ostream
-    void read(std::istream&) {}
-    void push_back(bool); // write a single bit
-    void push_back(uint32_t v); // write 32 bits
-    void push_back(uint32_t v, unsigned count); // write count bits
+    typedef Asn1Object BaseObjectType;
+    static Asn1Type getType() { return BaseType; }
+    // This method shall return true iff all elements that
+    // are required and without a default value have been assigned values
+    // that are initialized as well.
+    //virtual bool isInitialized() const = 0;
+    //virtual bool extensible() const { return false; }
+    //virtual bool extended() const { return false; }
+  };
+
+  class Oid : public Asn1Object<Oid, OID> {
   private:
-    std::vector<bool> data;
-    static const uint32_t mask[32];
-  };
-
-  const uint32_t Serializer::mask[] = {
-    0x80000000, 0x40000000, 0x20000000, 0x10000000, 0x08000000, 0x04000000, 0x02000000, 0x01000000,
-    0x00800000, 0x00400000, 0x00200000, 0x00100000, 0x00080000, 0x00040000, 0x00020000, 0x00010000,
-    0x00008000, 0x00004000, 0x00002000, 0x00001000, 0x00000800, 0x00000400, 0x00000200, 0x00000100,
-    0x00000080, 0x00000040, 0x00000020, 0x00000010, 0x00000008, 0x00000004, 0x00000002, 0x00000001,
-  };
-
-  void Serializer::push_back(bool v)
-  {
-    data.push_back(v);
-  }
-  void Serializer::push_back(uint32_t v)
-  {
-    uint32_t m = 0x80000000u;
-    while (m)
-    {
-      data.push_back((v & m)!=0);
-      m >>= 1;
-    }
-  }
-  void Serializer::push_back(uint32_t v, unsigned count)
-  {
-    v >>= (32 - count);
-    uint64_t m = Serializer::mask[(32-count) & 31];
-    while (m)
-    {
-      data.push_back((v & m) != 0);
-      m >>= 1;
-    }
-  }
-
-  struct AsnNull { int x; };
-
-  template <int LowerBound, int UpperBound>
-  class Integer
-  {
+    int oid_;
   public:
-    operator const int&() const { return v; }
-    Integer& operator=(Integer rhs) { v = rhs.v; return *this; }
-    Integer& operator=(int rhs)
-    {
-      if (rhs<LowerBound || rhs>UpperBound) { throw bound_exception(); }
-      v = rhs.v;
-      return *this;
-    }
+    operator int() { return oid_; }
+    Oid& operator=(int oid) { oid_ = oid; return *this; }
+  };
+
+  // The NULL object holds no value other than its presence/absence.
+  class Asn1NULL : public Asn1Object<Asn1NULL, Asn1Type::Null> {
+  public:
+    Asn1NULL() {}
+  };
+
+  template <int Min, int Max, typename PrimitiveType=int>
+  class Enumerated : public Asn1Object<Enumerated<Min,Max,PrimitiveType>, EnumeratedType> {
   private:
-    int v;
+    PrimitiveType value_;
+  public:
+    int value() const { return value_; }
+    Enumerated(const PrimitiveType& value) : value_(value) { }
+    Enumerated() { }
+    Enumerated& operator=(const PrimitiveType& value) { value_ = value; return *this; }
   };
 
-  template <int LowerBound, int UpperBound>
-  Serializer& operator<<(Serializer& s, Integer<LowerBound, UpperBound> v)
-  {
-    s.push_back(static_cast<uint32_t>(static_cast<int>(v)-LowerBound), bitwidth(UpperBound - LowerBound));
-    return s;
-  }
-
-  template <int LowerBound, int UpperBound, typename T>
-  class SequenceOf
-  {
+  // The base class for an element contained within a CHOICE
+  class ChoiceElementBase {
+  protected:
+    ChoiceElementBase(const ChoiceElementBase&) { }
+    ChoiceElementBase() { }
   public:
-    const T& operator[](int pos) const
-    {
-      if (pos<LowerBound || pos>UpperBound || pos - LowerBound >= vec_.size()) { throw bound_exception(); }
-      return vec_[pos - LowerBound];
-    }
-    T& operator[](int pos)
-    {
-      if (pos<LowerBound || pos>UpperBound) { throw bound_exception(); }
-      while (static_cast<size_t>(pos - LowerBound) >= vec_.size()) { vec_.push_back(T()); }
-      return vec_[pos - LowerBound];
-    }
-    typename std::vector<T>::iterator begin() { return vec_.begin(); }
-    typename std::vector<T>::const_iterator begin() const { return vec_.begin(); }
-    typename std::vector<T>::iterator cbegin() const { return vec_.cbegin(); }
-    typename std::vector<T>::iterator end() { return vec_.end(); }
-    typename std::vector<T>::const_iterator end() const { return vec_.end(); }
-    typename std::vector<T>::const_iterator cend() const { return vec_.cend(); }
-  private:
-    std::vector<T> vec_;
+    virtual const Asn1Any& element() const = 0;
+    virtual Asn1Any& element() = 0;
+    virtual int index() const = 0;
   };
 
-  template <typename T>
-  class Optional
-  {
-  public:
-    const T& get() const {
-      if (!data_) { throw unassigned_exception(); }
-      return *data_;
-    }
-    T& get() {
-      if (!data_) { data_ = std::move(std::unique_ptr<T>(new T())); }
-      return *data_;
-    }
-    bool opt() const { return static_cast<bool>(data_); }
-  private:
-    std::unique_ptr<T> data_;
-  };
-
-  class Choice
-  {
-  public:
-    Choice() : choice_(nullptr), choiceIndex_(0) {}
-    ~Choice() { delete choice_; }
-    void * choice_;
-    unsigned choiceIndex_;
-
-    template <typename T>
-    typename T::ReturnType & as()
-    {
-      if (choiceIndex_ != T::Index || !choice_)
-      {
-        delete choice_;
-        choice_ = new T::ReturnType;
-        choiceIndex_ = T::Index;
+  namespace Inserter {
+    // Defines a type that can be used for adding elements to an ASN.1 composite (SEQUENCE or CHOICE)
+    template <typename CompositeT> class Inserter {
+      CompositeT& container_;
+      std::back_insert_iterator< typename CompositeT::ContainerType_ > it_;
+    public:
+      explicit Inserter(CompositeT& container) : container_(container), it_(container.elements()) {}
+      Inserter& operator*() { return *this; }
+      Inserter& operator++() { return *this; }
+      Inserter& operator++(int) { return *this; }
+      Inserter& operator<<(typename CompositeT::BaseElement_& rhs) {
+        return operator=(rhs);
       }
-      return *reinterpret_cast<T::ReturnType*>(choice_);
-    }
-
-    template <typename T>
-    typename const T::ReturnType & as() const
-    {
-      if (choiceIndex_ != T::Index || !choice_)
-      {
-        throw unassigned_exception();
+      Inserter& operator=(typename CompositeT::BaseElement_& rhs) {
+        rhs.setContainer(container_);
+        *it_++ = &rhs;
+        return *this;
       }
-      return *reinterpret_cast<T::ReturnType*>(choice_);
+    };
+  }
+
+
+  // Defines an Asn1 Choice object.
+  // Example:
+  // class Mychoice : public Asn1::Choice {
+  //   Option<0, Asn1Type1>::type firstChoice() { return Option<0, Asn1Type1>::getElement(*this); }
+  //   Option<1, Asn1Type2>::type secondChoice() { return Option<1, Asn1Type2>::getElement(*this); }
+  //   ...
+  //   MyChoice() { }
+  // }
+  class Choice : public Asn1Object<Choice, ChoiceType> {
+  private:
+    int selected_;
+    std::shared_ptr<Asn1Any> element_;  // The selected element or nullptr if none selected
+
+  private:
+    //const ChoiceElementBase& base_element() const {
+    //  if (element_) return *element_;
+    //  throw std::exception("No Element Set");
+    //}
+    //ChoiceElementBase& base_element() {
+    //  return const_cast<ChoiceElementBase&>( static_cast<const Choice&>(*this).base_element() );
+    //}
+  protected:
+    template <int N, typename T>
+    T& select() {
+      if (selected_ != N) {
+        element_.reset(new T());
+      }
+      return dynamic_cast<T&>(*element_.get());
     }
 
-    template <typename T>
-    bool isa() const
+  public:
+    Choice() : selected_(-1) {}
+
+    bool hasElement() const { return element_ != nullptr; }
+    void reset() { element_.reset(); selected_ = -1; }
+    int selected() const { return selected_; }
+
+  private: 
+    void reset(int i, std::shared_ptr<Asn1Any> && e)
     {
-      if (!choice_) return false;
-      return T::Index == choiceIndex_;
+      element_ = std::move(e);
+      selected_ = i;
     }
+
+  public:
+    template <int X, typename T>
+    class Option {
+      Choice & parent_;
+    public:
+      Option& operator=(const Option&) {}
+      Option& operator=(const Option&&) {}
+      Option(const Option& other) : parent_(other.parent_) {}
+
+      Option(Choice& parent) : parent_(parent) {}
+      bool isSelected() const { return parent_.hasElement() && parent_.selected_ == X; }
+      bool reset() { if (isSelected()) { parent_.reset(); } }
+      const T* get() const
+      {
+        if (!isSelected()) {
+          return nullptr;
+        }
+        return dynamic_cast<T*>(parent_.element_.get());
+      }
+      T* get()
+      {
+        if (!isSelected()) {
+          parent_.reset(X, std::shared_ptr<T>(new T()));
+        }
+        return dynamic_cast<T*>(parent_.element_.get());
+      }
+      T& operator*() {
+        return *get();
+      }
+      T* operator->() {
+        return get();
+      }
+      Option& operator=(const T& rhs) {
+        parent_.reset(X, std::shared_ptr<T>(new T(rhs)));
+        return *this;
+      }
+    };
   };
 
-  // Note : Doesn't handle alphabet restrictions such as FROM("ABCDEF") so encoding is based on entire IA5String alphabet
-  template <size_t LowerBound, size_t UpperBound=LowerBound>
-  class IA5String
-  {
-  public:
-    IA5String() : s_(LowerBound, ' ') {}
-    IA5String& operator=(std::string & s) {
-      if (s.length() < LowerBound || s.length() > UpperBound) { throw bound_exception(); }
-      s_ = s;
+  // Wraps an object so that it can have an uninitialized state
+  // T should be:
+  // (a) CopyConstructible:
+  //     T u = rv; // Sets the value of u equivalent to the value of rv
+  //     T(rv);    // Creates an object equivalent to rv
+  // The value of rv is unchanged
+  //     
+  template <class T>
+  struct Optional {
+    std::shared_ptr<T> element_;
+    Optional() {}
+    Optional(const T& value) { element_ = std::shared_ptr<T>(new T(value)); }
+    Optional(const Optional& rhs)
+    {
+      if (rhs.element_)
+      {
+        element_ = std::shared_ptr<T>(new T(*rhs.element_));
+      }
+    }
+    ~Optional() { }
+    Optional& operator=(Optional rhs)
+    {
+      element_ = std::shared_ptr<T>(new T(rhs.element_));
       return *this;
     }
-    operator std::string() { return s_; }
-    size_t size() const { return s_.size(); }
-    auto cbegin() const { return s_.cbegin(); }
-    auto cend() const { return s_.cend(); }
-    auto begin() { return s_.begin(); }
-    const auto begin() const { return s_.cbegin(); }
-    auto end() { return s_.end(); }
-    const auto end() const { return s_.cend(); }
-  private:
-    std::string s_;
+    void construct() {
+      element_ = std::shared_ptr<T>(new T());
+    }
+    void construct(const T& value) {
+      element_ = std::shared_ptr<T>(new T(value));
+    }
+    void destroy() {
+      element_ = nullptr;
+    }
+    T* operator->() {
+      if (!element_)
+      {
+        element_ = std::shared_ptr<T>(new T());
+      }
+      return element_.get();
+    }
+    T& operator()() {
+      if (!element_)
+      {
+        element_ = std::shared_ptr<T>(new T());
+      }
+      return *element_.get();
+    }
+    void reset(T* value) {
+      element_ = std::shared_ptr<T>(new T(*value));
+    }
+    T& value() {
+      if (!element_) { construct(); }
+      return *element_;
+    }
+    const T& value() const {
+      if (!element_) { throw std::exception("element not initialized"); }
+      return *element_;
+    }
+    T& operator*() {
+      if (!element_) { construct(); }
+      return *element_;
+    }
+    const T& operator*() const {
+      if (!element_) { throw std::exception("element not initialized"); }
+      return *element_;
+    }
+    bool hasElement() const { return element_ != nullptr; }
   };
 
-  template <size_t LowerBound, size_t UpperBound = LowerBound>
-  class OctetString
+
+  // A sequence is simply a grouping of objects
+  // If a sequence contains the "..." marker then it is extensible.
+  // The serializer encodes a sequence by encoding the extensible bit iff it is present then
+  // by encoding the presence of optional+default elements then the elements themselves
+  class Sequence : public Asn1Object<Sequence, SequenceType> {
+  };
+
+  // Compute field size at compile time when possible
+  template<int range>
+  struct asn_field_size
   {
+    enum {
+      size = 1 + asn_field_size<range / 2>::size;
+    };
+  };
+  template<> struct asn_field_size<0>
+  {
+    enum { size = 0 };
+  };
+
+  // A sequence-of is basically a vector with min, max constraints
+  // The PER serializer encodes a sequence-of by first writing the number of elements in the
+  // sequence then the elements themselves.
+  // The number of elements is encoded as a bit field whose size is ceil(log2(max_elements - min_elements + 1))
+  // with the value number_of_elements - min_elements.
+  template <int LowerBound, int UpperBound>
+  class SequenceOfBase {
+  //private:
+  //  static const int min_index_ = LowerBound;
+  //  static const int max_index_ = UpperBound;
+  //protected:
+  //  SequenceOfBase() { }
+  //  SequenceOfBase(const SequenceOfBase& rhs) { }
+  //  SequenceOfBase& operator=(const SequenceOfBase& rhs) { }
   public:
-    OctetString() : s_(LowerBound, ' ') {}
-    OctetString& operator=(std::string & s) {
-      if (s.length() < LowerBound || s.length() > UpperBound) { throw bound_exception(); }
-      s_ = s;
+    static int min_index() { return LowerBound; }
+    static int max_index() { return UpperBound; }
+    static int field_size() {
+      return asn_field_size<UpperBound - LowerBound>::size;
+      //int field_size = 0;
+      //int delta = max_index_ - min_index_ + 1;
+      //while (delta > 1) { ++field_size; delta = (delta+1) / 2; }
+      //return field_size;
+    }
+  };
+
+  template <typename T, int LowerBound, int UpperBound = LowerBound>
+  class SequenceOf : public SequenceOfBase<LowerBound,UpperBound> {
+  public:
+    typedef T PrimitiveType;
+    typedef SequenceOf type;
+    typedef typename std::vector<PrimitiveType>::const_iterator const_iterator;
+    typedef typename std::vector<PrimitiveType>::iterator iterator;
+  private:
+    std::vector<T> elements_;
+  public:
+    SequenceOf() : elements_(LowerBound) {}
+    SequenceOf(const SequenceOf& rhs) : SequenceOfBase(rhs)
+    {
+      for (const_iterator it = rhs.elements_.begin(); it != rhs.elements_.end(); ++it)
+      {
+        elements_.push_back(T(*it));
+      }
+    }
+    void swap(SequenceOf& other)
+    {
+      SequenceOfBase::swap(other);
+      std::swap(elements_, other.elements_);
+    }
+    SequenceOf& operator=(SequenceOf rhs)
+    {
+      swap(rhs);
       return *this;
     }
-    operator std::string() { return s_; }
-    size_t size() const { return s_.size(); }
-    auto cbegin() const { return s_.cbegin(); }
-    auto cend() const { return s_.cend(); }
-    auto begin() { return s_.begin(); }
-    const auto begin() const { return s_.cbegin(); }
-    auto end() { return s_.end(); }
-    const auto end() const { return s_.cend(); }
-  private:
-    std::string s_;
+    T& operator[](unsigned pos) {
+      if (pos<0 || pos>UpperBound - LowerBound) {
+        throw std::out_of_range("Out of bounds");
+      }
+      if (pos >= elements_.size()) {
+        elements_.resize(pos+1);
+      }
+      return elements_[pos];
+    }
+    T& operator[](std::string asn1_index) {
+      int i = std::stoi(asn1_index);
+      if (i<LowerBound || i>UpperBound) {
+        throw std::out_of_range("Out of bounds");
+      }
+      unsigned pos = i - LowerBound;
+      if (pos >= elements_.size()) {
+        elements_.resize(pos+1);
+      }
+      //if (pos < elements_.size()) {
+      //  delete elements_[pos];
+      //  elements_[pos] = new T;
+      //}
+      return elements_[pos];
+    }
+    void assign(iterator first, iterator last)
+    {
+      elements_.assign(first, last);
+    }
+    void push_back(const T& elem) {
+      elements_.push_back(elem);
+    }
+    size_t size() const { return elements_.size(); }
+    auto begin() const { return elements_.begin(); }
+    auto end() const { return elements_.end(); }
+    auto begin() { return elements_.begin(); }
+    auto end() { return elements_.end(); }
+    void construct(unsigned /*i*/) {
+      throw std::exception("Not implemented");
+    }
+    void destroy(unsigned /*i*/) {
+      throw std::exception("Not implemented");
+    }
+    ~SequenceOf() {
+      elements_.clear();
+    }
+  protected:
+//    typedef std::vector<SequenceElementBase>::const_iterator const_iterator;
+//    typedef std::vector<SequenceElementBase>::iterator iterator;
+//    iterator begin() { return elements_.begin(); }
+//    const_iterator begin() const { return elements_.begin(); }
+//    iterator end() { return elements_.end(); }
+//    const_iterator end() const { return elements_.end(); }
+//    std::back_insert_iterator< std::vector<SequenceElementBase> > back_insert_iterator() { return std::back_inserter(elements_); }
   };
 
-  unsigned bitwidth(size_t range)
-  {
-    //    0 1 2 3 4 5 6 7 8 9
-    // /2 - 0 1 1 2 2 3 3 4 4
-    // /4 - - 0 0 1 1 1 1 2 2
-    // w  0 1 2 2 3 3 3 3 
-    unsigned bitwidth_ = 0;
-    while (range>0) { ++bitwidth_; range /= 2; }
-    return bitwidth_;
-  }
 
-  template <size_t LowerBound, size_t UpperBound = LowerBound>
-  Serializer& operator << (Serializer& os, const IA5String<LowerBound, UpperBound> & s)
-  {
-#pragma warning(push)
-#pragma warning(disable : 4127) // Conditional expression is constant
-    if (UpperBound != LowerBound) {
-#pragma warning(pop)
-      os.push_back(s.size() - LowerBound, bitwidth(UpperBound - LowerBound));
-    }
-    for (auto c : s)
-    {
-      os.push_back(c, 5);
-    }
-    return os;
-  }
+  class Asn1Boolean : public Asn1Object<Asn1Boolean,Boolean> {
+  public:
+    typedef bool PrimitiveType;
+  private:
+    bool initialized_;
+    PrimitiveType value_;
+  public:
+    Asn1Type getType() const { return Asn1::Boolean; }
+    PrimitiveType value() const { return value_; }
+    bool isInitialized() const { return initialized_; }
 
-  template <size_t LowerBound, size_t UpperBound = LowerBound>
-  Serializer& operator << (Serializer& os, const OctetString<LowerBound, UpperBound> & s)
-  {
-#pragma warning(push)
-#pragma warning(disable : 4127) // Conditional expression is constant
-    if (UpperBound != LowerBound) {
-#pragma warning(pop)
-      os.push_back(s.size() - LowerBound, bitwidth(UpperBound - LowerBound));
+    Asn1Boolean() : initialized_(false), value_(false) {}
+    Asn1Boolean(const Asn1Boolean& src) : initialized_(src.initialized_), value_(src.value_) {}
+    const Asn1Boolean& operator=(const Asn1Boolean& src) {
+      initialized_ = src.initialized_;
+      value_ = src.value_;
+      return *this;
     }
-    // for (auto c = s.begin(); c != s.end(); ++c)
-    for (auto c : s)
-    {
-      os.push_back(c, 8);
+    const Asn1Boolean& operator=(PrimitiveType v) {
+      initialized_ = true;
+      value_ = v;
     }
-    return os;
-  }
+    void setValue(PrimitiveType v) {
+      initialized_ = true;
+      value_ = v;
+    }
+  };
 
-  template <size_t LowerBound, size_t UpperBound = LowerBound, typename T>
-  Asn1::Serializer& operator << (Serializer& os, const SequenceOf<LowerBound, UpperBound, T> & s)
-  {
-    for (auto e : s)
-    {
-      os << e;
+  class Asn1Integer : public Asn1Object<Asn1Integer,Integer> {
+  public:
+    typedef int PrimitiveType;
+  private:
+    bool initialized_;
+    int min_;
+    int max_;
+    PrimitiveType value_;
+  public:
+    Asn1Type getType() const { return Asn1::Integer; }
+    int getMinimum() const { return min_; }
+    int getMaximum() const { return max_; }
+    PrimitiveType getValue() const { return value_; }
+    bool isInitialized() const { return initialized_; }
+
+    Asn1Integer(int min, int max) : min_(min), max_(max), initialized_(false), value_(0) {}
+    Asn1Integer(const Asn1Integer& src) : min_(src.min_), max_(src.max_), initialized_(src.initialized_), value_(src.value_) {}
+    const Asn1Integer& operator=(const Asn1Integer& src) {
+      min_ = src.min_;
+      max_ = src.max_;
+      initialized_ = src.initialized_;
+      value_ = src.value_;
+      return *this;
     }
-    return os;
-  }
+    const Asn1Integer& operator=(PrimitiveType v) {
+      initialized_ = true;
+      value_ = v;
+    }
+
+    void setValue(PrimitiveType v) {
+      // assert (min <= v <= max)
+      value_ = v;
+      initialized_ = true;
+    }
+  };
+
+  class BitString : public Asn1Object<BitString, Bitstring> {
+  public:
+    typedef std::string PrimitiveType;
+  private:
+    bool initialized_;
+    int min_size_;
+    int max_size_;
+    PrimitiveType value_;
+  public:
+    Asn1Type getType() const { return Bitstring; }
+    virtual Asn1StringType getStringType() const { return Octet; }
+    int getMinimumSize() const { return min_size_; }
+    int getMaximumSize() const { return max_size_; }
+    bool isInitialized() const { return initialized_; }
+
+    BitString() : min_size_(0), max_size_(Unbounded), initialized_(false), value_() {}
+    BitString(int min, int max) : min_size_(min), max_size_(max), initialized_(false), value_() {}
+    BitString(const BitString& src) : min_size_(src.min_size_), max_size_(src.max_size_), initialized_(src.initialized_), value_(src.value_) {}
+    ~BitString() {}
+    const BitString& operator=(BitString src)
+    {
+      swap(src);
+      return *this;
+    }
+    void swap(BitString& other)
+    {
+      if (min_size_ != other.min_size_ || max_size_ != other.max_size_)
+      {
+        throw std::exception("Cannot swap BitString`s with different boundings");
+      }
+      std::swap(initialized_, other.initialized_);
+      std::swap(value_, other.value_);
+    }
+    const BitString& operator=(const PrimitiveType v) {
+      initialized_ = true;
+      value_ = v;
+      return *this;
+    }
+    operator const PrimitiveType() const {
+      return value_;
+    }
+  };
+
+  template <int MinSize = Unbounded, int MaxSize = MinSize>
+  class Asn1BitString : public BitString {
+  public:
+    Asn1BitString() : BitString(MinSize, MaxSize) {}
+    Asn1BitString(const Asn1BitString& rhs) : BitString(rhs) { }
+    ~Asn1BitString() { }
+    Asn1BitString<MinSize, MaxSize>& operator=(const std::string & s) {
+      BitString::operator=(s);
+      return *this;
+    }
+  };
+
+  class Asn1OctetString : public Asn1Object<Asn1OctetString, OctetString> {
+  public:
+    typedef std::string PrimitiveType;
+  private:
+    bool initialized_;
+    int min_size_;
+    int max_size_;
+    PrimitiveType value_;
+  public:
+    Asn1Type getType() const { return OctetString; }
+    virtual Asn1StringType getStringType() const { return Octet; }
+    int getMinimumSize() const { return min_size_; }
+    int getMaximumSize() const { return max_size_; }
+    bool isInitialized() const { return initialized_; }
+
+    Asn1OctetString(int min, int max) : min_size_(min), max_size_(max), initialized_(false), value_() {}
+    Asn1OctetString(const Asn1OctetString& src) : min_size_(src.min_size_), max_size_(src.max_size_), initialized_(src.initialized_), value_(src.value_) {}
+    const Asn1OctetString& operator=(Asn1OctetString src) {
+      swap(src);
+      return *this;
+    }
+    void swap(Asn1OctetString & other) {
+      std::swap(min_size_, other.min_size_);
+      std::swap(max_size_, other.max_size_);
+      std::swap(initialized_, other.initialized_);
+      std::swap(value_, other.value_);
+    }
+    const Asn1OctetString& operator=(const PrimitiveType & v) {
+      initialized_ = true;
+      value_ = v;
+      return *this;
+    }
+    operator const PrimitiveType() const {
+      return value_;
+    }
+    const PrimitiveType str() const {
+      return value_;
+    }
+    const char* c_str() const {
+      return value_.c_str();
+    }
+  };
+
+  template <int Min, int Max = Min>
+  class Asn1Int : public Asn1Integer {
+  public:
+    typedef int PrimitiveType;
+    Asn1Int() : Asn1Integer(Min, Max) {}
+    Asn1Int(int h) : Asn1Integer(Min, Max) { setValue(h); }
+  };
+
+  template <int MinSize=Unbounded, int MaxSize = MinSize>
+  class Asn1String : public Asn1OctetString {
+  public:
+    Asn1String() : Asn1OctetString(MinSize, MaxSize) {}
+    Asn1String(int h) : Asn1OctetString(MinSize, MaxSize) { setValue(h); }
+    ~Asn1String() { }
+    virtual Asn1StringType getStringType() const { return Octet; }
+    Asn1String<MinSize, MaxSize>& operator=(const std::string & s) {
+      Asn1OctetString::operator=(s);
+      return *this;
+    }
+  };
+
+  template <int MinSize=Unbounded, int MaxSize = MinSize>
+  class Asn1IA5String : public Asn1OctetString {
+  public:
+    Asn1IA5String() : Asn1OctetString(MinSize, MaxSize) {}
+    Asn1IA5String(const Asn1IA5String& rhs) : Asn1OctetString(rhs) { }
+    ~Asn1IA5String() { }
+    virtual Asn1StringType getStringType() const { return IA5; }
+    Asn1IA5String<MinSize, MaxSize>& operator=(const std::string & s) {
+      Asn1OctetString::operator=(s);
+      return *this;
+    }
+  };
 }
+
 

@@ -41,6 +41,7 @@ namespace Asn1 {
     //  s << m.mode().value();
     //}
     PerSerializer& operator<<(PerSerializer& s, PMCPDLCAPDUsVersion1::ProtectedDownlinkMessage& m) {
+      // s << options << m.aalgorithmIdentifier << ..
       // s << static_cast<Asn1::Sequence&>(m);
       s.stream.push_back(m.algorithmIdentifier.isInitialized(), 1);
       s.stream.push_back(m.protectedMessage.isInitialized(), 1);      
@@ -55,7 +56,7 @@ namespace Asn1 {
 
     PerSerializer& operator<<(PerSerializer& s, PMCPDLCAPDUsVersion1::ProtectedStartDownMessage& m) {
       // s << static_cast<Asn1::Sequence&>(m);
-      if (m.elements()[0]);
+      // if (m.elements()[0]);
       s.stream.push_back(m.mode().value());
       s << m.startDownlinkMessage();
       return s;
